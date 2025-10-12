@@ -1,0 +1,16 @@
+# Production dependencies
+-r requirements.txt
+
+# Production Database
+psycopg2-binary==2.9.9
+
+# Production Server
+gunicorn==21.2.0
+
+# Monitoring & Performance
+sentry-sdk[fastapi]==1.38.0
+orjson==3.9.10
+
+# Cache & Session Management
+redis==5.0.1
+aioredis==2.0.1

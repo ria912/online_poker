@@ -1,0 +1,11 @@
+# Development-only minimal dependencies
+fastapi==0.95.2
+uvicorn==0.22.0
+pydantic==1.10.12
+python-socketio==5.8.0
+sqlalchemy==1.4.44
+aiosqlite==0.19.0
+python-dotenv==1.0.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.24.1
