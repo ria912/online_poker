@@ -71,10 +71,6 @@ class Seat:
         self.bet_in_round = 0
         self.bet_in_hand = 0
 
-    def can_pay(self, amount: int) -> bool:
-            """指定額を支払い可能かチェック"""
-            return self.current_stack >= amount
-
     def pay(self, amount: int) -> None:
         """
         座席にいるプレイヤーが指定額を支払う。
@@ -82,7 +78,9 @@ class Seat:
         """
         if not self.is_occupied:
             raise ValueError(f"Seat {self.index} is empty")
-        
+        if amount <= 0:
+            raise ValueError("Invalid payment amount")
+
         pay_amount = min(amount, self.current_stack)
 
         self.current_stack -= pay_amount

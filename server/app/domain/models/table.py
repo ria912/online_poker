@@ -15,7 +15,7 @@ class Pot:
         self.eligible_seats: List[int] = []
 
 class Table:
-    def __init__(self, seat_count: int = 6):
+    def __init__(self, seat_count: int = 3):
         self.deck = Deck()
         self.seats: List[Seat] = [Seat(index=i, player=None) for i in range(seat_count)]
         self.community_cards: List[Card] = []

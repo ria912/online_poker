@@ -1,12 +1,12 @@
-from ..domain.game_state import GameState
-from ..domain.action import Action
-from ..domain.seat import Seat
-from ..domain.enum import ActionType, SeatStatus
+from ..models.game_state import GameState
+from ..models.action import PlayerAction
+from ..models.seat import Seat
+from ..models.enum import ActionType, SeatStatus
 
 class BettingService:
     """ベッティング関連のビジネスロジック"""
-    
-    async def execute_action(self, game: GameState, action: Action) -> bool:
+
+    async def execute_action(self, game: GameState, action: PlayerAction) -> bool:
         """アクションを実行"""
         seat = self._find_player_seat(game, action.player_id)
         if not seat:
@@ -48,8 +48,8 @@ class BettingService:
             seat.last_action = ActionType.ALL_IN
         
         return True
-    
-    def is_valid_action(self, game: GameState, action: Action) -> bool:
+
+    def is_valid_action(self, game: GameState, action: PlayerAction) -> bool:
         """アクションが有効かチェック"""
         seat = self._find_player_seat(game, action.player_id)
         if not seat or not seat.is_active:

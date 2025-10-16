@@ -4,7 +4,7 @@ from .deck import Deck
 from .player import Player
 from .seat import Seat
 from .table import Table
-from .action import Action
+from .action import PlayerAction
 from .enum import Round, GameStatus, ActionType, Position
 import uuid
 
@@ -12,7 +12,7 @@ class GameState:
     """ゲーム全体の進行状態を管理するクラス"""
     def __init__(self, big_blind: int=100, small_blind: int=50, seat_count: int=6):
         self.id: str = str(uuid.uuid4())
-        self.history: list[Action] = []
+        self.history: list[PlayerAction] = []
         self.status: GameStatus = GameStatus.WAITING
         self.players: List[Player] = []
         self.table: Table = Table(seat_count=seat_count)
@@ -67,7 +67,7 @@ class GameState:
 
     def add_action(self, player_id: str, action_type: ActionType, amount: Optional[int] = None):
         """アクションを履歴に追加する"""
-        action = Action(player_id=player_id, action_type=action_type, amount=amount)
+        action = PlayerAction(player_id=player_id, action_type=action_type, amount=amount)
         self.history.append(action)
 
     def clear_for_new_hand(self):

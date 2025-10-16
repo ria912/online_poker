@@ -1,7 +1,7 @@
 from typing import Optional, List
-from ..domain.game_state import GameState
-from ..domain.seat import Seat
-from ..domain.enum import SeatStatus, Round, ActionType
+from ..models.game_state import GameState
+from ..models.seat import Seat
+from ..models.enum import SeatStatus, Round, ActionType
 
 class TurnManager:
     """ターン管理とBBオプションを考慮したロジック"""
@@ -25,11 +25,7 @@ class TurnManager:
             # アクティブな座席のみが対象
             if not seat.is_active:
                 continue
-            
-            # BBオプション考慮：プリフロップでBBが未行動で、コールされた場合はBBにオプション
-            if self._should_give_bb_option(game, seat, index):
-                return index
-            
+
             # 通常のアクション判定
             if not seat.acted or seat.bet_in_round < game.current_bet:
                 return index

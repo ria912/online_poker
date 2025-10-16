@@ -5,7 +5,7 @@ from .enum import ActionType
 
 
 @dataclass(frozen=True)
-class Action:
+class PlayerAction:
     """プレイヤーのアクションを表すクラス"""
     player_id: str
     action_type: ActionType
