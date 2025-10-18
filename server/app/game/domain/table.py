@@ -29,12 +29,12 @@ class Table:
     @property
     def is_hand_over(self) -> bool:
         """現在のハンドが終了しているかどうか"""
-        return len(self.in_hand_players()) == 1
+        return len(self.in_hand_seats()) == 1
     
     @property
     def is_betting_over(self) -> bool:
         """以降ベッティングが存在するかどうか"""
-        return len(self.active_players()) == 1
+        return len(self.active_seats()) == 1
 
     def reset_for_new_hand(self):
         """テーブルの状態を新しいハンドのためにリセットする"""
@@ -42,18 +42,18 @@ class Table:
         self.community_cards = []
         self.pots = [Pot()]
         for seat in self.seats:
-            seat.reset_for_new_hand()
+            seat.clear_for_new_hand()
     
     def reset_for_new_round(self):
         """テーブルの状態を新しいベッティングラウンドのためにリセットする"""
         for seat in self.seats:
             seat.reset_for_new_round()
 
-    def sit_player(self, player: Player, seat_index: int, stack: int= 10000) -> None:
+    def sit_player(self, player: Player, seat_index: int) -> None:
         """指定した座席にプレイヤーを座らせる"""
         if not (0 <= seat_index < len(self.seats)):
             raise IndexError("Invalid seat index")
-        self.seats[seat_index].sit_down(player, stack)
+        self.seats[seat_index].sit_down(player)
 
     def stand_player(self, seat_index: int) -> None:
         """指定した座席からプレイヤーを立たせる"""
@@ -62,13 +62,13 @@ class Table:
         
         self.seats[seat_index].stand_up()
 
-    def in_hand_players(self) -> List[Player]:
+    def in_hand_seats(self) -> List[Seat]:
         """現在のハンドに参加しているプレイヤー一覧を返す"""
-        return [seat.player for seat in self.seats if seat.in_hand]
+        return [seat for seat in self.seats if seat.in_hand]
 
-    def active_players(self) -> List[Player]:
+    def active_seats(self) -> List[Seat]:
         """アクティブなプレイヤー一覧を返す"""
-        return [seat.player for seat in self.seats if seat.is_active]
+        return [seat for seat in self.seats if seat.is_active]
 
     def empty_seats(self) -> List[int]:
         """空席のインデックス一覧を返す"""

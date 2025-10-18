@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from ..models.game_state import GameState
+from ..domain.game_state import GameState
 from .hand_evaluator import HandEvaluator
 
 class HandService:

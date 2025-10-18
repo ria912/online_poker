@@ -10,7 +10,7 @@ import uuid
 
 class GameState:
     """ゲーム全体の進行状態を管理するクラス"""
-    def __init__(self, big_blind: int=100, small_blind: int=50, seat_count: int=6):
+    def __init__(self, big_blind: int=100, small_blind: int=50, seat_count: int=3):
         self.id: str = str(uuid.uuid4())
         self.history: list[PlayerAction] = []
         self.status: GameStatus = GameStatus.WAITING

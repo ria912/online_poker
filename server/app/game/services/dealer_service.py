@@ -75,7 +75,7 @@ class DealerService:
                     game.dealer_seat_index = seat.index
                     break
             return
-        
+
         # 次のアクティブプレイヤーを探す
         next_dealer_index = self._get_next_active_seat_index(game, game.dealer_seat_index)
         
@@ -111,7 +111,6 @@ class DealerService:
             game.big_blind_seat_index = self._get_next_active_seat_index(game, game.dealer_seat_index)
         else:
             # 3人以上の場合
-            # ディーラーの左隣がSB、その次がBB
             game.small_blind_seat_index = self._get_next_active_seat_index(game, game.dealer_seat_index)
             if game.small_blind_seat_index is not None:
                 game.big_blind_seat_index = self._get_next_active_seat_index(game, game.small_blind_seat_index)
@@ -121,14 +120,12 @@ class DealerService:
         if game.small_blind_seat_index is not None:
             sb_seat = game.table.seats[game.small_blind_seat_index]
             if sb_seat.is_active:
-                sb_amount = min(game.small_blind, sb_seat.current_stack)
-                sb_seat.pay(sb_amount)
+                sb_seat.pay(game.small_blind)
         
         if game.big_blind_seat_index is not None:
             bb_seat = game.table.seats[game.big_blind_seat_index]
             if bb_seat.is_active:
-                bb_amount = min(game.big_blind, bb_seat.current_stack)
-                bb_seat.pay(bb_amount)
+                bb_seat.pay(game.big_blind)
                 bb_seat.last_action = None  # ブラインドは強制なのでアクションではない
                 bb_seat.acted = False  # BBオプションのため未行動扱い
                 
@@ -160,7 +157,7 @@ class DealerService:
         """フロップ（3枚）を配布"""
         if len(game.table.community_cards) > 0:
             return  # 既に配布済み
-
+        game.current_round = Round.FLOP
         flop_cards = game.table.deck.draw(3)
         game.table.community_cards.extend(flop_cards)
     
@@ -168,7 +165,7 @@ class DealerService:
         """ターン（4枚目）を配布"""
         if len(game.table.community_cards) != 3:
             return  # フロップが未配布
-
+        game.current_round = Round.TURN
         turn_card = game.table.deck.draw(1)
         game.table.community_cards.extend(turn_card)
     
@@ -176,7 +173,7 @@ class DealerService:
         """リバー（5枚目）を配布"""
         if len(game.table.community_cards) != 4:
             return  # ターンが未配布
-
+        game.current_round = Round.RIVER
         river_card = game.table.deck.draw(1)
         game.table.community_cards.extend(river_card)
     

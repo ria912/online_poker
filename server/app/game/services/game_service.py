@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 import asyncio
 from ..domain.game_state import GameState
 from ..domain.player import Player
-from ..domain.action import Action
+from ..domain.action import PlayerAction
 from ..domain.enum import ActionType, GameStatus
 from .poker_engine import PokerEngine
 
@@ -59,7 +59,7 @@ class GameService:
         if not game:
             return False
         
-        action = Action(player_id=player_id, action_type=action_type, amount=amount or 0)
+        action = PlayerAction(player_id=player_id, action_type=action_type, amount=amount or 0)
         return await self.poker_engine.process_action(game, action)
     
     def get_game_state(self, game_id: str) -> Optional[GameState]:

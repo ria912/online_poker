@@ -1,10 +1,10 @@
 from typing import Optional
 from ..domain.game_state import GameState
 from ..domain.player import Player
-from ..domain.action import Action
+from ..domain.action import PlayerAction
 from ..domain.enum import ActionType, GameStatus, Round
 from .hand_service import HandService
-from .betting_service import BettingService
+from .action_service import ActionService
 from .turn_manager import TurnManager
 from .dealer_service import DealerService
 
@@ -13,7 +13,7 @@ class PokerEngine:
     
     def __init__(self):
         self.hand_service = HandService()
-        self.betting_service = BettingService()
+        self.betting_service = ActionService()
         self.turn_manager = TurnManager()
         self.dealer_service = DealerService()
     
@@ -38,8 +38,8 @@ class PokerEngine:
         self.turn_manager.set_first_actor_for_round(game)
         
         return True
-    
-    async def process_action(self, game: GameState, action: Action) -> bool:
+
+    async def process_action(self, game: GameState, action: PlayerAction) -> bool:
         """プレイヤーアクションを処理"""
         if not self._is_valid_action(game, action):
             return False
@@ -84,8 +84,8 @@ class PokerEngine:
         if seat.is_occupied:
             return False
         
-        # プレイヤーを着席
-        game.table.sit_player(player, seat_index, buy_in)
+        # ドメインの新APIを使用
+        seat.sit_down(player, buy_in)
         
         # ゲームのプレイヤーリストに追加
         if player not in game.players:
@@ -136,7 +136,7 @@ class PokerEngine:
         # ゲーム終了処理
         game.status = GameStatus.HAND_COMPLETE
     
-    def _is_valid_action(self, game: GameState, action: Action) -> bool:
+    def _is_valid_action(self, game: GameState, action: PlayerAction) -> bool:
         """アクションが有効かチェック"""
         # 基本的な検証
         if game.status != GameStatus.IN_PROGRESS:

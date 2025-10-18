@@ -8,9 +8,7 @@ class Seat:
     def __init__(self, index: int, player: Optional[Player]):
         self.index: int = index
         self.player: Optional[Player] = player
-        self.starting_stack: int = 0
-        self.current_stack: int = 0
-
+        self.stack: int = 0
         self.hole_cards: List[Card] = []
         self.position: Optional[Position] = None
         self.bet_in_round: int = 0
@@ -30,20 +28,32 @@ class Seat:
     @property
     def is_active(self) -> bool:
         """この座席がアクティブかどうか"""
-        return self.is_occupied and self.status == SeatStatus.ACTIVE and self.current_stack > 0
+        return self.is_occupied and self.status == SeatStatus.ACTIVE and self.stack > 0
     
     @property
     def in_hand(self) -> bool:
         """この座席が現在のハンドに参加しているかどうか"""
         return self.is_occupied and self.status in {SeatStatus.ACTIVE, SeatStatus.ALL_IN}
     
-    def reset_for_new_hand(self) -> None:
+    def pay(self, amount: int) -> int:
+        """支払いを実行し、実際の支払額を返す（整合性を一元管理）"""
+        actual = min(amount, self.stack)
+        self.stack -= actual
+        self.bet_in_round += actual
+        self.bet_in_hand += actual
+        return actual
+    
+    def refund(self, amount: int) -> None:
+        """払い戻し"""
+        self.stack += amount
+    
+    def clear_for_new_hand(self) -> None:
         """新しいハンドのために座席の状態をリセットする"""
-        self.hole_cards = []
+        self.hole_cards.clear()
+        self.bet_in_round = 0
         self.bet_in_hand = 0
-        self.reset_for_new_round() # ラウンドごとのリセットも呼び出す
         if self.is_occupied:
-            self.status = SeatStatus.ACTIVE if self.current_stack > 0 else SeatStatus.SITTING_OUT
+            self.status = SeatStatus.ACTIVE if self.stack > 0 else SeatStatus.SITTING_OUT
 
     def reset_for_new_round(self) -> None:
         """新しいベッティングラウンドのために座席の状態をリセットする"""
@@ -52,44 +62,22 @@ class Seat:
             self.last_action = None
             self.acted = False
 
-    def sit_down(self, player: Player, stack: int) -> None:
+    def sit_down(self, player: Player, stack: int = 0) -> None:
         """プレイヤーを座席に座らせる"""
         if self.is_occupied:
             raise ValueError(f"Seat {self.index} is already occupied")
         self.player = player
-        self.starting_stack = stack
-        self.current_stack = stack
+        self.stack = stack
         self.status = SeatStatus.ACTIVE
 
     def stand_up(self) -> None:
         """プレイヤーを座席から外す"""
         self.player = None
+        self.stack = 0
         self.status = SeatStatus.EMPTY
-        self.current_stack = 0
-        self.starting_stack = 0
         self.hole_cards = []
         self.bet_in_round = 0
         self.bet_in_hand = 0
-
-    def pay(self, amount: int) -> None:
-        """
-        座席にいるプレイヤーが指定額を支払う。
-        statusがALL_INになる場合もある。
-        """
-        if not self.is_occupied:
-            raise ValueError(f"Seat {self.index} is empty")
-        if amount <= 0:
-            raise ValueError("Invalid payment amount")
-
-        pay_amount = min(amount, self.current_stack)
-
-        self.current_stack -= pay_amount
-        self.bet_in_round += pay_amount
-        self.bet_in_hand += pay_amount
-        
-        if self.current_stack == 0:
-            self.status = SeatStatus.ALL_IN
-            self.last_action = ActionType.ALL_IN
    
     def receive_cards(self, cards: List[Card]) -> None:
         """座席にいるプレイヤーがカードを受け取る"""
