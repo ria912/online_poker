@@ -11,8 +11,6 @@ class ActionService:
         seat = self._find_player_seat(game, action.player_id)
         if not seat:
             return False
-        if game.current_seat_index is None:
-            return False
         if game.table.seats[game.current_seat_index] != seat:
             return False
 
@@ -32,23 +30,17 @@ class ActionService:
             seat.acted = True
 
         elif action.action_type == ActionType.BET:
-            if action.amount and action.amount > 0:
+            if action.amount > game.current_bet:
+                bet_amount = seat.pay(action.amount)
                 seat.last_action = ActionType.BET
-                seat.pay(action.amount)
                 seat.acted = True
-                
-                # 現在のベット額とアグレッサー更新
-                game.current_bet = seat.bet_in_round
-                game.last_aggressive_actor_index = seat.index
-                
-                if action.amount > game.last_raise_delta:
-                    game.last_raise_delta = action.amount
-                
-                # ベットもアグレッシブアクションなので他プレイヤーをリセット
-                self._reset_acted_flags_after_raise(game, seat.index)
+                if bet_amount > game.last_raise_delta:
+                    game.last_raise_delta = bet_amount
+                    self._reset_acted_flags_after_raise(game, seat.index)
+
 
         elif action.action_type == ActionType.RAISE:
-            if action.amount and action.amount > game.current_bet:
+            if action.amount > game.current_bet:
                 total_bet = action.amount
                 raise_amount = total_bet - seat.bet_in_round
                 game.current_bet = total_bet
@@ -62,6 +54,7 @@ class ActionService:
                 
         if seat.stack == 0:
             seat.status = SeatStatus.ALL_IN
+            seat.last_action = ActionType.ALL_IN
         
         return True
 
@@ -70,35 +63,29 @@ class ActionService:
         seat = self._find_player_seat(game, action.player_id)
         if not seat or not seat.is_active:
             return False
+        if game.table.seats[game.current_seat_index] != seat:
+            return False
         
         # アクション固有の検証
-        if action.action_type == ActionType.FOLD:
-            return True
-        
-        elif action.action_type == ActionType.CALL:
-            call_amount = game.current_bet - seat.bet_in_round
-            return call_amount > 0 and seat.stack >= call_amount
-        
+        if action.action_type == ActionType.CALL:
+            return seat.stack > 0
         elif action.action_type == ActionType.CHECK:
             # ベット額が合っている場合のみチェック可能
-            return seat.bet_in_round >= game.current_bet
-        
+            return seat.bet_in_round == game.current_bet
         elif action.action_type == ActionType.BET:
-            if not action.amount or action.amount <= 0:
+            if not action.amount:
                 return False
+            # 既にベットがある場合、ベット不可
             if game.current_bet > 0:
-                return False  # 既にベットがある場合はBET不可
-            return seat.stack >= action.amount
-        
-        elif action.action_type == ActionType.RAISE:
-            if not action.amount or action.amount <= game.current_bet:
                 return False
-            min_raise = game.current_bet + game.big_blind
-            needed = action.amount - seat.bet_in_round
-            return seat.stack >= needed and action.amount >= min_raise
-        
-        # デフォルトで拒否
-        return False
+            return action.amount <= seat.stack and action.amount > 0
+        elif action.action_type == ActionType.RAISE:
+            if not action.amount:
+                return False
+            # リオープンされていない場合、レイズ不可
+            if seat.acted:
+                return False
+            return (seat.stack + seat.bet_in_round) >= action.amount > game.current_bet
 
     def _find_player_seat(self, game: GameState, player_id: str):
         """プレイヤーIDから座席を検索"""

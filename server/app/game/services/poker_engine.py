@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, List
 from ..domain.game_state import GameState
 from ..domain.player import Player
+from ..domain.seat import Seat
 from ..domain.action import PlayerAction
 from ..domain.enum import ActionType, GameStatus, Round
 from .hand_service import HandService
@@ -13,14 +14,14 @@ class PokerEngine:
     
     def __init__(self):
         self.hand_service = HandService()
-        self.betting_service = ActionService()
+        self.action_service = ActionService()
         self.turn_manager = TurnManager()
         self.dealer_service = DealerService()
     
-    async def start_new_hand(self, game: GameState) -> bool:
+    def start_new_hand(self, game: GameState) -> bool:
         """新しいハンドを開始"""
-        active_players = [seat for seat in game.table.seats if seat.is_active]
-        if len(active_players) < 2:
+        active_seats = [seat for seat in game.table.seats if seat.is_active]
+        if len(active_seats) < 2:
             return False
         
         # テーブル状態をリセット
@@ -34,8 +35,8 @@ class PokerEngine:
         game.status = GameStatus.IN_PROGRESS
         game.current_round = Round.PREFLOP
         
-        # 最初のアクター設定（BBオプション考慮）
-        self.turn_manager.set_first_actor_for_round(game)
+        # 最初のアクター設定
+        self.turn_manager.start_round(game)
         
         return True
 
@@ -45,23 +46,23 @@ class PokerEngine:
             return False
         
         # アクションを実行
-        success = await self.betting_service.execute_action(game, action)
+        success = await self.action_service.execute_action(game, action)
         if not success:
             return False
         
         # アクション履歴に追加
         game.history.append(action)
         
-        # 次のアクターを設定
-        has_next_actor = self.turn_manager.advance_to_next_actor(game)
+        # 次のアクターに進む
+        round_continues = self.turn_manager.advance_turn(game)
         
         # ベッティングラウンド終了チェック
-        if not has_next_actor or self.turn_manager.is_betting_round_complete(game):
-            await self._advance_to_next_round(game)
+        if not round_continues:
+            self._advance_to_next_round(game)
         
         return True
     
-    async def seat_player(
+    def seat_player(
         self, 
         game: GameState, 
         player: Player, 
@@ -84,7 +85,7 @@ class PokerEngine:
         if seat.is_occupied:
             return False
         
-        # ドメインの新APIを使用
+        # Seatのsit_downメソッドを使用
         seat.sit_down(player, buy_in)
         
         # ゲームのプレイヤーリストに追加
@@ -93,38 +94,42 @@ class PokerEngine:
         
         return True
     
-    def get_valid_actions(self, game: GameState, player_id: str) -> list:
+    def get_valid_actions(self, game: GameState, player_id: str) -> List[ActionType]:
         """プレイヤーの有効なアクションを取得"""
-        return self.turn_manager.get_valid_actions_for_player(game, player_id)
+        # プレイヤーIDから座席を探す
+        seat = self._find_player_seat(game, player_id)
+        if not seat:
+            return []
+        
+        return self.turn_manager.get_valid_actions(game, seat.index)
     
-    async def _advance_to_next_round(self, game: GameState) -> None:
+    def _advance_to_next_round(self, game: GameState) -> None:
         """次のベッティングラウンドに進む"""
         # ベットをポットに回収
         self.dealer_service.collect_bets_to_pots(game)
         
-        # ターン状態をリセット
-        self.turn_manager.reset_for_new_round(game)
-        
         # 次のラウンドに進む
         if game.current_round == Round.PREFLOP:
-            self.dealer_service.deal_community_cards(game, Round.FLOP)
             game.current_round = Round.FLOP
+            self.dealer_service.deal_community_cards(game, Round.PREFLOP)
         elif game.current_round == Round.FLOP:
-            self.dealer_service.deal_community_cards(game, Round.TURN)
             game.current_round = Round.TURN
+            self.dealer_service.deal_community_cards(game, Round.FLOP)
         elif game.current_round == Round.TURN:
-            self.dealer_service.deal_community_cards(game, Round.RIVER)
             game.current_round = Round.RIVER
+            self.dealer_service.deal_community_cards(game, Round.TURN)
         elif game.current_round == Round.RIVER:
-            await self._proceed_to_showdown(game)
+            self._proceed_to_showdown(game)
             return
         
         # 新しいラウンドの最初のアクター設定
-        self.turn_manager.set_first_actor_for_round(game)
+        self.turn_manager.start_round(game)
     
-    async def _proceed_to_showdown(self, game: GameState) -> None:
+    def _proceed_to_showdown(self, game: GameState) -> None:
         """ショーダウンに進む"""
         game.current_round = Round.SHOWDOWN
+        
+        # ハンドに参加している全プレイヤーのカードを公開
         in_hand_seats = [seat for seat in game.table.seats if seat.in_hand]
         for seat in in_hand_seats:
             seat.show_hand = True
@@ -143,14 +148,21 @@ class PokerEngine:
             return False
         
         # プレイヤーが存在するかチェック
-        player = game.get_player_by_id(action.player_id)
-        if not player:
+        seat = self._find_player_seat(game, action.player_id)
+        if not seat:
             return False
         
         # ターンマネージャーで有効なアクションかチェック
-        valid_actions = self.turn_manager.get_valid_actions_for_player(game, action.player_id)
+        valid_actions = self.turn_manager.get_valid_actions(game, seat.index)
         if action.action_type not in valid_actions:
             return False
         
-        # ベッティングサービスに詳細検証を委譲
-        return self.betting_service.is_valid_action(game, action)
+        # アクションサービスに詳細検証を委譲
+        return self.action_service.is_valid_action(game, action)
+    
+    def _find_player_seat(self, game: GameState, player_id: str) -> Optional[Seat]:
+        """プレイヤーIDから座席を検索"""
+        for seat in game.table.seats:
+            if seat.is_occupied and seat.player.id == player_id:
+                return seat
+        return None

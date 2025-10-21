@@ -66,7 +66,6 @@ class DealerService:
     def rotate_dealer_button(self, game: GameState) -> None:
         """
         ディーラーボタンを次のアクティブプレイヤーに移動
-        SBがSITTING_OUTの場合はボタンを据え置く
         """
         if game.dealer_seat_index is None:
             # 初回設定：最初のアクティブプレイヤー
@@ -75,24 +74,11 @@ class DealerService:
                     game.dealer_seat_index = seat.index
                     break
             return
-
         # 次のアクティブプレイヤーを探す
         next_dealer_index = self._get_next_active_seat_index(game, game.dealer_seat_index)
-        
         if next_dealer_index is None:
             return  # アクティブプレイヤーが見つからない
         
-        # 新しいディーラーポジションでのSB位置を確認
-        potential_sb_index = self._get_next_active_seat_index(game, next_dealer_index)
-        
-        if potential_sb_index is not None:
-            potential_sb_seat = game.table.seats[potential_sb_index]
-            
-            # SBがSITTING_OUTの場合はボタンを据え置く
-            if potential_sb_seat.status == SeatStatus.SITTING_OUT:
-                return
-        
-        # ボタンを移動
         game.dealer_seat_index = next_dealer_index
     
     def set_blind_positions(self, game: GameState) -> None:
@@ -126,11 +112,10 @@ class DealerService:
             bb_seat = game.table.seats[game.big_blind_seat_index]
             if bb_seat.is_active:
                 bb_seat.pay(game.big_blind)
-                bb_seat.last_action = None  # ブラインドは強制なのでアクションではない
-                bb_seat.acted = False  # BBオプションのため未行動扱い
-                
+                bb_seat.last_action = None if bb_seat.stack > 0 else SeatStatus.ALL_IN
+                bb_seat.acted = False
                 # 現在のベット額を設定
-                game.current_bet = bb_seat.bet_in_round
+                game.current_bet = max(sb_seat.bet_in_round, bb_seat.bet_in_round)
     
     def deal_hole_cards(self, game: GameState) -> None:
         """各プレイヤーにホールカードを配布"""
@@ -146,11 +131,11 @@ class DealerService:
     
     def deal_community_cards(self, game: GameState, round_type: Round) -> None:
         """コミュニティカードを配布"""
-        if round_type == Round.FLOP:
+        if round_type == Round.PREFLOP:
             self._deal_flop(game)
-        elif round_type == Round.TURN:
+        elif round_type == Round.FLOP:
             self._deal_turn(game)
-        elif round_type == Round.RIVER:
+        elif round_type == Round.TURN:
             self._deal_river(game)
     
     def _deal_flop(self, game: GameState) -> None:
@@ -182,17 +167,10 @@ class DealerService:
         active_seats = [seat for seat in game.table.seats if seat.is_active]
         if len(active_seats) < 2:
             return False
-        
-        # ディーラーボタンを回転
+
         self.rotate_dealer_button(game)
-        
-        # ブラインドポジションを設定
         self.set_blind_positions(game)
-        
-        # ホールカードを配布
         self.deal_hole_cards(game)
-        
-        # ブラインドを徴収
         self.collect_blinds(game)
         
         return True
