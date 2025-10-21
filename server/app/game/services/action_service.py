@@ -54,7 +54,6 @@ class ActionService:
                 
         if seat.stack == 0:
             seat.status = SeatStatus.ALL_IN
-            seat.last_action = ActionType.ALL_IN
         
         return True
 
@@ -62,8 +61,6 @@ class ActionService:
         """アクションが有効かチェック"""
         seat = self._find_player_seat(game, action.player_id)
         if not seat or not seat.is_active:
-            return False
-        if game.table.seats[game.current_seat_index] != seat:
             return False
         
         # アクション固有の検証

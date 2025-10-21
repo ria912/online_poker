@@ -8,7 +8,6 @@ class Position(str, Enum):
     HJ = "HJ"
     CO = "CO"
     BTN = "BTN"
-    NONE = "NONE"
 
 
 class Round(str, Enum):

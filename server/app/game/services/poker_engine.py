@@ -36,7 +36,7 @@ class PokerEngine:
         game.current_round = Round.PREFLOP
         
         # 最初のアクター設定
-        self.turn_manager.start_round(game)
+        self.turn_manager.set_first_actor_for_round(game)
         
         return True
 

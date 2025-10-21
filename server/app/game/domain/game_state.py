@@ -25,7 +25,7 @@ class GameState:
         self.small_blind_seat_index: Optional[int] = None
         self.big_blind_seat_index: Optional[int] = None
         self.current_seat_index: Optional[int] = None
-        self.last_aggressive_actor_index: Optional[int] = None # ラウンド終了判定に使用？
+        self.last_aggressive_actor_index: Optional[int] = None
 
         self.current_bet: int = 0       # 現在のベット額
         self.min_raise_amount: int = 0  # 最小レイズ額(総額)

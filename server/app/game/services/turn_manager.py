@@ -112,7 +112,7 @@ class TurnManager:
         valid_actions.append(ActionType.FOLD)
 
         # コール/チェック
-        call_amount = max(0, game.current_bet - seat.bet_in_round)
+        call_amount = game.current_bet - seat.bet_in_round
         if call_amount == 0:
             valid_actions.append(ActionType.CHECK)
         elif seat.stack >= call_amount:

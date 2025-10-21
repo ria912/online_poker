@@ -15,7 +15,7 @@ class DealerService:
     def collect_bets_to_pots(self, game: GameState) -> None:
         """
         ラウンド終了時に各座席のbet_in_roundをポットに回収する
-        サイドポット計算も含む
+        オールイン発生時にサイドポットを作成
         """
         # 現在のベット状況を取得
         bet_contributions = {}
@@ -26,42 +26,70 @@ class DealerService:
         if not bet_contributions:
             return
         
-        # 既存のポットをクリア（新しく計算するため）
-        game.table.pots = []
+        # オールインプレイヤーを検出
+        all_in_seats = [seat.index for seat in game.table.seats if seat.status == SeatStatus.ALL_IN]
         
+        # オールインがない場合：メインポットに全額追加
+        if not all_in_seats:
+            total_bets = sum(bet_contributions.values())
+            
+            # メインポットがなければ作成
+            if not game.table.pots:
+                main_pot = Pot()
+                main_pot.amount = 0
+                main_pot.eligible_seats = list(bet_contributions.keys())
+                game.table.pots.append(main_pot)
+            
+            # メインポットに追加
+            game.table.pots[0].amount += total_bets
+            
+        else:
+            # オールインがある場合：サイドポット計算
+            self._create_side_pots(game, bet_contributions, all_in_seats)
+        
+        # 各座席のbet_in_roundをクリア
+        for seat in game.table.seats:
+            seat.bet_in_round = 0
+    
+    def _create_side_pots(self, game: GameState, bet_contributions: dict, all_in_seats: List[int]) -> None:
+        """
+        オールイン発生時にサイドポットを作成
+        
+        Args:
+            game: ゲーム状態
+            bet_contributions: {seat_index: bet_amount}
+            all_in_seats: オールインしたシートのインデックスリスト
+        """
         # ベット額でソート（昇順）
         sorted_bets = sorted(bet_contributions.items(), key=lambda x: x[1])
         
         current_level = 0
-        eligible_players = list(bet_contributions.keys())
+        remaining_players = list(bet_contributions.keys())
         
         for seat_index, bet_amount in sorted_bets:
             if bet_amount > current_level:
-                # 新しいポットまたは既存ポットに追加
-                pot_amount = (bet_amount - current_level) * len(eligible_players)
+                contribution = bet_amount - current_level
+                pot_amount = contribution * len(remaining_players)
                 
+                # メインポットがなければ作成、あれば新しいサイドポット作成
                 if not game.table.pots:
                     # メインポット作成
                     main_pot = Pot()
                     main_pot.amount = pot_amount
-                    main_pot.eligible_seats = eligible_players.copy()
+                    main_pot.eligible_seats = remaining_players.copy()
                     game.table.pots.append(main_pot)
                 else:
                     # サイドポット作成
                     side_pot = Pot()
                     side_pot.amount = pot_amount
-                    side_pot.eligible_seats = eligible_players.copy()
+                    side_pot.eligible_seats = remaining_players.copy()
                     game.table.pots.append(side_pot)
                 
                 current_level = bet_amount
             
-            # このプレイヤーをオールインとして除外
-            if seat_index in eligible_players:
-                eligible_players.remove(seat_index)
-        
-        # 各座席のbet_in_roundをクリア
-        for seat in game.table.seats:
-            seat.bet_in_round = 0
+            # オールインプレイヤーは次のポットから除外
+            if seat_index in all_in_seats and seat_index in remaining_players:
+                remaining_players.remove(seat_index)
     
     def rotate_dealer_button(self, game: GameState) -> None:
         """
@@ -107,35 +135,32 @@ class DealerService:
             sb_seat = game.table.seats[game.small_blind_seat_index]
             if sb_seat.is_active:
                 sb_seat.pay(game.small_blind)
+                sb_seat.status = SeatStatus.ACTIVE if sb_seat.stack > 0 else SeatStatus.ALL_IN
         
         if game.big_blind_seat_index is not None:
             bb_seat = game.table.seats[game.big_blind_seat_index]
             if bb_seat.is_active:
                 bb_seat.pay(game.big_blind)
-                bb_seat.last_action = None if bb_seat.stack > 0 else SeatStatus.ALL_IN
-                bb_seat.acted = False
+                bb_seat.status = SeatStatus.ACTIVE if bb_seat.stack > 0 else SeatStatus.ALL_IN
                 # 現在のベット額を設定
                 game.current_bet = max(sb_seat.bet_in_round, bb_seat.bet_in_round)
     
     def deal_hole_cards(self, game: GameState) -> None:
         """各プレイヤーにホールカードを配布"""
-        active_seats = [seat for seat in game.table.seats if seat.in_hand]
-        
-        # デッキをシャッフル
+        in_hand_seats = game.table.in_hand_seats()
         game.table.deck.shuffle()
-        
         # 各プレイヤーに2枚ずつ配布
-        for seat in active_seats:
+        for seat in in_hand_seats:
             hole_cards = game.table.deck.draw(2)
             seat.receive_cards(hole_cards)
     
-    def deal_community_cards(self, game: GameState, round_type: Round) -> None:
+    def deal_community_cards(self, game: GameState) -> None:
         """コミュニティカードを配布"""
-        if round_type == Round.PREFLOP:
+        if game.current_round == Round.PREFLOP:
             self._deal_flop(game)
-        elif round_type == Round.FLOP:
+        elif game.current_round == Round.FLOP:
             self._deal_turn(game)
-        elif round_type == Round.TURN:
+        elif game.current_round == Round.TURN:
             self._deal_river(game)
     
     def _deal_flop(self, game: GameState) -> None:
@@ -170,9 +195,8 @@ class DealerService:
 
         self.rotate_dealer_button(game)
         self.set_blind_positions(game)
-        self.deal_hole_cards(game)
         self.collect_blinds(game)
-        
+        self.deal_hole_cards(game)
         return True
     
     def _get_next_active_seat_index(self, game: GameState, current_index: int) -> Optional[int]:
