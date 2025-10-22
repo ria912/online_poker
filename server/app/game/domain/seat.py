@@ -27,7 +27,7 @@ class Seat:
     
     @property
     def is_active(self) -> bool:
-        """この座席がアクティブかどうか"""
+        """この座席がアクション可能かどうか"""
         return self.is_occupied and self.status == SeatStatus.ACTIVE and self.stack > 0
     
     @property
@@ -41,6 +41,8 @@ class Seat:
         self.stack -= actual
         self.bet_in_round += actual
         self.bet_in_hand += actual
+        if self.stack == 0:
+            self.status = SeatStatus.ALL_IN
         return actual
     
     def refund(self, amount: int) -> None:
