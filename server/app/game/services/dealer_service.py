@@ -1,10 +1,9 @@
 # app/game/services/dealer_service.py
-from typing import List, Optional, Dict
+from typing import List, Optional
 from ..domain.game_state import GameState
 from ..domain.table import Pot
 from ..domain.enum import SeatStatus, Round
 from ..domain.deck import Card
-from ..domain.pot_calculator import PotCalculator, PotDistributor
 
 
 class DealerService:
@@ -12,38 +11,6 @@ class DealerService:
     
     def __init__(self):
         pass
-    
-    def distribute_pots(self, game: GameState) -> List[dict]:
-        """
-        ポット分配を計算し、勝者のスタックにチップを移動する
-        
-        Returns:
-            [{"player_id": str, "seat_index": int, "hand_score": int, "pot_won": int, "pot_type": str}]
-        """
-        # ハンドスコアを収集
-        hand_scores = {
-            seat.index: seat.hand_score 
-            for seat in game.table.seats 
-            if seat.in_hand and hasattr(seat, 'hand_score')
-        }
-        
-        # ハンドに残っている座席
-        in_hand_seats = [seat.index for seat in game.table.seats if seat.in_hand]
-        
-        # ポット分配を計算（ドメインロジック）
-        distributions = PotCalculator.calculate_distribution(
-            pots=game.table.pots,
-            hand_scores=hand_scores,
-            in_hand_seats=in_hand_seats
-        )
-        
-        # スタックに反映（実行）
-        results = PotDistributor.apply_distribution(
-            seats=game.table.seats,
-            distributions=distributions
-        )
-        
-        return results
     
     def collect_bets_to_pots(self, game: GameState) -> None:
         """
@@ -62,12 +29,23 @@ class DealerService:
         # オールインプレイヤーを検出
         all_in_seats = [seat.index for seat in game.table.seats if seat.status == SeatStatus.ALL_IN]
         
-        # ドメインロジックでポット構造を計算
-        game.table.pots = PotCalculator.create_pots_from_bets(
-            bet_contributions=bet_contributions,
-            all_in_seats=all_in_seats,
-            existing_pots=game.table.pots
-        )
+        # オールインがない場合：メインポットに全額追加
+        if not all_in_seats:
+            total_bets = sum(bet_contributions.values())
+            
+            # メインポットがなければ作成
+            if not game.table.pots:
+                main_pot = Pot()
+                main_pot.amount = 0
+                main_pot.eligible_seats = list(bet_contributions.keys())
+                game.table.pots.append(main_pot)
+            
+            # メインポットに追加
+            game.table.pots[0].amount += total_bets
+            
+        else:
+            # オールインがある場合：サイドポット計算
+            self._create_side_pots(game, bet_contributions, all_in_seats)
         
         # 各座席のbet_in_roundをクリア
         for seat in game.table.seats:
@@ -75,16 +53,43 @@ class DealerService:
     
     def _create_side_pots(self, game: GameState, bet_contributions: dict, all_in_seats: List[int]) -> None:
         """
-        [DEPRECATED] オールイン発生時にサイドポットを作成
+        オールイン発生時にサイドポットを作成
         
-        このメソッドは PotCalculator.create_pots_from_bets() に置き換えられました。
-        後方互換性のため残していますが、使用は推奨されません。
+        Args:
+            game: ゲーム状態
+            bet_contributions: {seat_index: bet_amount}
+            all_in_seats: オールインしたシートのインデックスリスト
         """
-        game.table.pots = PotCalculator.create_pots_from_bets(
-            bet_contributions=bet_contributions,
-            all_in_seats=all_in_seats,
-            existing_pots=game.table.pots
-        )
+        # ベット額でソート（昇順）
+        sorted_bets = sorted(bet_contributions.items(), key=lambda x: x[1])
+        
+        current_level = 0
+        remaining_players = list(bet_contributions.keys())
+        
+        for seat_index, bet_amount in sorted_bets:
+            if bet_amount > current_level:
+                contribution = bet_amount - current_level
+                pot_amount = contribution * len(remaining_players)
+                
+                # メインポットがなければ作成、あれば新しいサイドポット作成
+                if not game.table.pots:
+                    # メインポット作成
+                    main_pot = Pot()
+                    main_pot.amount = pot_amount
+                    main_pot.eligible_seats = remaining_players.copy()
+                    game.table.pots.append(main_pot)
+                else:
+                    # サイドポット作成
+                    side_pot = Pot()
+                    side_pot.amount = pot_amount
+                    side_pot.eligible_seats = remaining_players.copy()
+                    game.table.pots.append(side_pot)
+                
+                current_level = bet_amount
+            
+            # オールインプレイヤーは次のポットから除外
+            if seat_index in all_in_seats and seat_index in remaining_players:
+                remaining_players.remove(seat_index)
     
     def rotate_dealer_button(self, game: GameState) -> None:
         """
@@ -208,34 +213,45 @@ class DealerService:
     
     def calculate_pot_distribution(self, game: GameState) -> List[dict]:
         """
-        [DEPRECATED] ポット分配の計算（実際の分配は行わない）
-        
-        このメソッドは PotCalculator.calculate_distribution() に置き換えられました。
-        後方互換性のため残していますが、使用は推奨されません。
-        
-        Returns:
-            [{"seat_index": int, "amount": int, "pot_type": str}]
+        ポット分配の計算（実際の分配は行わない）
+        返り値: [{"seat_index": int, "amount": int, "pot_type": str}]
         """
-        hand_scores = {
-            seat.index: seat.hand_score 
-            for seat in game.table.seats 
-            if seat.in_hand and hasattr(seat, 'hand_score')
-        }
+        distributions = []
         
-        in_hand_seats = [seat.index for seat in game.table.seats if seat.in_hand]
+        for i, pot in enumerate(game.table.pots):
+            if pot.amount == 0:
+                continue
+            
+            # このポットの対象者で現在もin_handの座席
+            eligible_in_hand = [
+                seat_index for seat_index in pot.eligible_seats
+                if game.table.seats[seat_index].in_hand
+            ]
+            
+            if not eligible_in_hand:
+                continue
+            
+            # 最高ハンドを見つける（hand_scoreが最小）
+            best_score = min(
+                game.table.seats[seat_index].hand_score 
+                for seat_index in eligible_in_hand
+            )
+            
+            winners = [
+                seat_index for seat_index in eligible_in_hand
+                if game.table.seats[seat_index].hand_score == best_score
+            ]
+            
+            # ポットを分配
+            share_per_winner = pot.amount // len(winners)
+            remainder = pot.amount % len(winners)
+            
+            for j, winner_index in enumerate(winners):
+                share = share_per_winner + (1 if j < remainder else 0)
+                distributions.append({
+                    "seat_index": winner_index,
+                    "amount": share,
+                    "pot_type": "main" if i == 0 else f"side_{i}"
+                })
         
-        distributions = PotCalculator.calculate_distribution(
-            pots=game.table.pots,
-            hand_scores=hand_scores,
-            in_hand_seats=in_hand_seats
-        )
-        
-        # 旧フォーマットに変換（後方互換性）
-        return [
-            {
-                "seat_index": dist["seat_index"],
-                "amount": dist["amount"],
-                "pot_type": dist["pot_type"]
-            }
-            for dist in distributions
-        ]
+        return distributions

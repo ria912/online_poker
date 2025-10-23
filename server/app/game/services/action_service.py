@@ -8,7 +8,7 @@ class ActionService:
 
     async def execute_action(self, game: GameState, action: PlayerAction) -> bool:
         """アクションを実行"""
-        seat = game.table.get_seat_by_player_id(action.player_id)
+        seat = self._find_player_seat(game, action.player_id)
         if not seat:
             return False
         if game.table.seats[game.current_seat_index] != seat:
@@ -56,6 +56,40 @@ class ActionService:
             seat.status = SeatStatus.ALL_IN
         
         return True
+
+    def is_valid_action(self, game: GameState, action: PlayerAction) -> bool:
+        """アクションが有効かチェック"""
+        seat = self._find_player_seat(game, action.player_id)
+        if not seat or not seat.is_active:
+            return False
+        
+        # アクション固有の検証
+        if action.action_type == ActionType.CALL:
+            return seat.stack > 0
+        elif action.action_type == ActionType.CHECK:
+            # ベット額が合っている場合のみチェック可能
+            return seat.bet_in_round == game.current_bet
+        elif action.action_type == ActionType.BET:
+            if not action.amount:
+                return False
+            # 既にベットがある場合、ベット不可
+            if game.current_bet > 0:
+                return False
+            return action.amount <= seat.stack and action.amount > 0
+        elif action.action_type == ActionType.RAISE:
+            if not action.amount:
+                return False
+            # リオープンされていない場合、レイズ不可
+            if seat.acted:
+                return False
+            return (seat.stack + seat.bet_in_round) >= action.amount > game.current_bet
+
+    def _find_player_seat(self, game: GameState, player_id: str):
+        """プレイヤーIDから座席を検索"""
+        for seat in game.table.seats:
+            if seat.is_occupied and seat.player.id == player_id:
+                return seat
+        return None
 
     def _reset_acted_flags_after_raise(self, game: GameState, raiser_seat_index: int) -> None:
         """レイズ後に他のプレイヤーの行動フラグをリセット"""

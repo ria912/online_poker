@@ -73,11 +73,4 @@ class Table:
     def empty_seats(self) -> List[int]:
         """空席のインデックス一覧を返す"""
         return [seat.index for seat in self.seats if seat.status == SeatStatus.EMPTY]
-    
-    def get_seat_by_player_id(self, player_id: str) -> Optional[Seat]:
-        """プレイヤーIDから座席を検索する"""
-        for seat in self.seats:
-            if seat.is_occupied and seat.player and seat.player.id == player_id:
-                return seat
-        return None
 

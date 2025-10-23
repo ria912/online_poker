@@ -36,35 +36,18 @@
 - 新ハンド開始、アクション処理、ラウンド遷移、ショーダウン進行を束ねる
 - `HandService`, `ActionService`, `TurnManager`, `DealerService` を協調させる
 - プレイヤーID → 座席検索のヘルパーメソッド提供
-- **ステートマシン**: `process_action` がゲーム状態遷移を一元管理
 
 **主要API**:
 - `start_new_hand(game)` → `bool`
-- `process_action(game, PlayerAction)` → `bool`: ステートマシンとして機能
+- `process_action(game, PlayerAction)` → `bool`
 - `seat_player(game, player, seat_index, buy_in)` → `bool`
 - `get_valid_actions(game, player_id)` → `List[ActionType]`
 
-**内部メソッド（ステートマシン）**:
-- `_advance_to_next_street(game)`: 次のストリートへ進む（カード配布とターンセットアップ）
-- `_check_and_run_it_out(game)`: 自動進行(Run it out)の判定と実行
-- `_proceed_to_fold_win(game)`: フォールド勝ちの処理
+**内部メソッド**:
+- `_advance_to_next_round(game)`: ラウンド遷移制御
 - `_proceed_to_showdown(game)`: ショーダウン処理
 - `_is_valid_action(game, action)`: アクション検証
-
-**ステートマシンの動作**:
-`process_action` は以下の順序でゲーム状態を判断・遷移します:
-1. アクション実行
-2. 次のアクターに進む → ラウンド継続ならここで終了
-3. ベット回収（ラウンド終了時）
-4. フォールド勝ちチェック → 該当すれば終了
-5. リバーベッティング終了チェック → 該当すればショーダウン
-6. 次のストリートに進む
-7. 自動進行チェック → アクティブプレイヤーが1人以下ならリバーまで自動進行
-
-**自動進行(Run it out)の実装**:
-アクション不要（`active_seats <= 1`）かつショーダウン必要（`in_hand_seats > 1`）の場合、
-`_check_and_run_it_out` が自動的にリバーまでカードを配布してショーダウンに進みます。
-これにより、複数人がオールインした状態を正しく処理できます。
+- `_find_player_seat(game, player_id)`: 座席検索
 
 ### `dealer_service.py`
 ディーラー責務を担当。
@@ -151,23 +134,17 @@ await game_service.start_game("game_1")
 # ↓ TurnManager.start_round() → 最初のアクター設定
 ```
 
-### 3. アクション処理（ステートマシン）
+### 3. アクション処理
 ```python
 await game_service.process_player_action("game_1", "player_1", ActionType.CALL)
-# ↓ PokerEngine.process_action() がステートマシンとして動作
-# ↓ (1) ActionService.execute_action() → Seat.pay() 使用
-# ↓ (2) TurnManager.advance_to_next_actor()
-# ↓ (3) ラウンド継続 → 終了、ラウンド終了 → (4)以降へ
-# ↓ (4) DealerService.collect_bets_to_pots()
-# ↓ (5) フォールド勝ちチェック → 該当なら _proceed_to_fold_win()
-# ↓ (6) リバーベッティング終了チェック → 該当なら _proceed_to_showdown()
-# ↓ (7) _advance_to_next_street()
+# ↓ PokerEngine.process_action()
+# ↓ _is_valid_action() → TurnManager & ActionService で検証
+# ↓ ActionService.execute_action() → Seat.pay() 使用
+# ↓ TurnManager.advance_turn()
+# ↓ ラウンド完了 → _advance_to_next_round()
+#   - DealerService.collect_bets_to_pots()
 #   - DealerService.deal_community_cards()
-#   - TurnManager.reset_for_new_round()
-#   - TurnManager.set_first_actor_for_round()
-# ↓ (8) _check_and_run_it_out()
-#   - active_seats <= 1 かつ in_hand_seats > 1 の場合
-#   - リバーまで自動進行 → _proceed_to_showdown()
+#   - TurnManager.start_round()
 ```
 
 ### 4. ショーダウン
@@ -187,8 +164,6 @@ await game_service.process_player_action("game_1", "player_1", ActionType.CALL)
 - **ドメイン**: 状態と制約（`Seat.pay()` でスタック整合性保証）
 - **サービス**: 進行と副作用（配布順序、アクター選定、通知タイミング）
 - **スタック操作**: 必ず `Seat.pay()` を経由（ActionService, DealerService）
-- **ステートマシン**: `PokerEngine.process_action` がゲーム状態遷移を一元管理
-- **自動進行**: アクティブプレイヤーが1人以下の場合、リバーまで自動進行してショーダウン
 - **検証の多層化**:
   1. `TurnManager`: 基本的な順番・状態チェック
   2. `ActionService`: アクション固有の詳細検証

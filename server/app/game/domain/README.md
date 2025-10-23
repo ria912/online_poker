@@ -1,465 +1,167 @@
-# Domain 層 - テキサスホールデム・ポーカーエンジン
+# Domain 層（学習用ガイド）
 
-**目標**: シングルプレイ（1人プレイヤー vs AI）のリアルタイムWebアプリ  
-**設計原則**: 純粋なビジネスロジック層。外部I/O・UI・通信は含まず、ポーカーのルールと状態遷移のみを担当
-
----
-
-## 📐 設計思想
-
-### コア原則
-- **単一責任**: 各クラスは1つの概念（座席/テーブル/デッキ/状態）に専念
-- **不変条件の保護**: スタック≥0、ホールカード=2枚などをクラス内で強制
-- **集約ルート**: `GameState` が全体の整合性を保証
-- **副作用の隔離**: ランダム性（シャッフル）・通知はサービス層が担当
-- **支払い処理の一元化**: `Seat.pay()` でスタック操作を統一管理
-
-### Services層との責任分離
-| 層 | 責任 |
-|---|---|
-| **Domain** | 「何が正しい状態か」を定義・検証 |
-| **Services** | 「いつ・どの順序で実行するか」を制御 |
+このフォルダは、テキサスホールデムにおける「ビジネスルールの中核（ルールの真実の在処）」を表現します。外部I/O（DB/ネットワーク/ログ）やUI都合の値は持たず、ポーカーの状態と不変条件を厳密に扱います。
 
 ---
 
-## 📦 ファイル構成
+## 設計思想（Principles）
 
-### `enum.py` - 列挙型定義
-**全ての状態・アクション・ポジションを型安全に表現**
-
-```python
-Round: PREFLOP → FLOP → TURN → RIVER → SHOWDOWN
-SeatStatus: EMPTY | ACTIVE | FOLDED | ALL_IN | SITTING_OUT
-ActionType: FOLD | CHECK | CALL | BET | RAISE | ALL_IN
-Position: SB | BB | LJ | HJ | CO | BTN
-GameStatus: WAITING | IN_PROGRESS | ROUND_OVER | BETTING_OVER | HAND_COMPLETE
-```
+- **単一責任**: 各クラスはテーブル/座席/プレイヤー/山札/状態などの1つの概念に責務を限定します。
+- **不変条件の保持**: スタックが負の値にならない、ホールカードは2枚など、ゲームの基本制約をクラス内部で守ります。
+- **集約の一貫性**: `GameState` を集約ルートとし、現在のラウンド・ベット状況など「ハンドの真実」を一元管理します。
+- **副作用の隔離**: ランダム性（シャッフル）やメッセージ送出はサービス層。ドメインは純粋な状態遷移と検証に集中します。
+- **表現の明確さ**: `enum.py` の列挙で状態/アクション/ポジションを明示し、マジックナンバーを排除します。
+- **支払い処理の一元化**: `Seat.pay()` メソッドでスタック操作を統一し、整合性を保証します。
 
 ---
 
-### `player.py` - プレイヤーエンティティ
-**最小情報のみ保持（座席・スタックは `Seat` が管理）**
+## ファイル一覧と役割
 
-```python
-class Player:
-    id: str          # 一意識別子
-    name: str        # 表示名
-    is_ai: bool      # AI判定フラグ
-```
+### `action.py`
+値オブジェクト `PlayerAction` を定義。プレイヤーID、アクション種別、金額（任意）を持つ不変データ。
 
-**シングルプレイ拡張案:**
-```python
-ai_difficulty: str = "medium"  # easy/medium/hard
-ai_personality: str = "balanced"  # tight/loose/aggressive
-```
+### `deck.py`
+`Card` と `Deck` を定義。シャッフルとドローのみを提供。`Card.to_treys_int()` で treys 評価器との橋渡しを行います。
 
----
+### `enum.py`
+列挙型を定義：
+- `Round`: PREFLOP/FLOP/TURN/RIVER/SHOWDOWN
+- `SeatStatus`: EMPTY/ACTIVE/FOLDED/ALL_IN/SITTING_OUT
+- `ActionType`: FOLD/CHECK/CALL/BET/RAISE/ALL_IN
+- `Position`: SB/BB/BTN/UTG/MP/CO
+- `GameStatus`: WAITING/IN_PROGRESS/HAND_COMPLETE
 
-### `deck.py` - カード・デッキ
-**52枚のカード管理とtreys評価器との連携**
+### `game_state.py`
+ハンド全体の状態を表現する集約ルート。
+- 現在のラウンド、ボタン/ブラインド位置、現在ベット額
+- 最小レイズ幅（`last_raise_delta`）、最後のアグレッシブアクター
+- アクション履歴、参加プレイヤー、勝者リスト、テーブル参照を保持
+- 新ハンド/新ラウンド開始時の初期化メソッドで状態の整合性を保ちます
 
-```python
-class Card:
-    rank: str  # "23456789TJQKA"
-    suit: str  # "shdc" (♠♥♦♣)
-    
-    to_treys_int() -> int  # treys評価器用の変換
+### `player.py`
+プレイヤーのID・表示名・AIフラグなど最小情報を保持するエンティティ。
 
-class Deck:
-    cards: List[Card]  # 52枚のカード
-    
-    shuffle() -> None
-    draw(n: int) -> List[Card]
-```
+### `seat.py`
+各座席の状態を管理：
+- 着席者、スタック、ホールカード、ポジション
+- ラウンド内/ハンド内のベット（`bet_in_round`, `bet_in_hand`）
+- 行動フラグ（`acted`, `last_action`）、ステータス（`status`）
+- **重要**: `pay(amount)` メソッドでスタック操作を一元化
+  - 実際の支払額を返却（スタック不足時は利用可能額のみ）
+  - `stack`, `bet_in_round`, `bet_in_hand` を同時更新し整合性を保証
+- `refund(amount)`: 払い戻し処理
+- `sit_down(player, stack)`: プレイヤーを着席
+- `stand_up()`: プレイヤーを退席
+- `clear_for_new_hand()`, `reset_for_new_round()`: 状態リセット
 
-**重要**: デッキは重複を許さず、引いたカードは自動削除
+### `table.py`
+テーブル上の共有状態を管理：
+- コミュニティカード、ポット群、座席配列、デッキ
+- 新ハンド/新ラウンド用のリセットメソッド
+- 補助クエリ: `in_hand_seats()`, `active_seats()`, `empty_seats()`, `occupied_seats()`
 
----
-
-### `action.py` - アクション値オブジェクト
-**不変のアクション記録**
-
-```python
-@dataclass(frozen=True)
-class PlayerAction:
-    player_id: str
-    action_type: ActionType
-    amount: int = 0
-```
+### `__init__.py`
+ドメイン公開のエントリーポイント。
 
 ---
 
-### `seat.py` - 座席管理 ⭐
-**各座席の状態とスタック操作の中核**
+## 不変条件・整合性ルール
 
-#### 主要プロパティ
-```python
-index: int                    # 座席番号
-player: Optional[Player]      # 着席者
-stack: int                    # 残りチップ
-hole_cards: List[Card]        # ホールカード（2枚）
-position: Optional[Position]  # ポジション（SB/BB/BTN等）
-status: SeatStatus            # EMPTY/ACTIVE/FOLDED/ALL_IN/SITTING_OUT
-
-bet_in_round: int             # 現ラウンドのベット累計
-bet_in_hand: int              # 現ハンド全体のベット累計
-last_action: Optional[ActionType]
-acted: bool                   # 現ラウンドで行動済みか
-hand_score: int               # 役評価スコア（小さいほど強い）
-show_hand: bool               # ショーダウンで公開するか
-```
-
-#### 重要メソッド
-```python
-pay(amount: int) -> int:
-    """
-    支払い処理の唯一の入口
-    - 実際に支払える額を返却（スタック不足時は全額）
-    - stack, bet_in_round, bet_in_handを同時更新
-    - 整合性を保証
-    """
-
-refund(amount: int):
-    """払い戻し処理"""
-
-sit_down(player: Player, stack: int):
-    """プレイヤーを着席"""
-
-stand_up():
-    """プレイヤーを退席"""
-
-receive_cards(cards: List[Card]):
-    """ホールカードを受け取る（2枚必須）"""
-
-clear_for_new_hand():
-    """新ハンド開始時のリセット"""
-
-reset_for_new_round():
-    """新ラウンド開始時のリセット（bet_in_round=0）"""
-```
-
-#### プロパティ
-```python
-is_occupied: bool   # プレイヤーが座っている
-is_active: bool     # アクション可能（ACTIVE かつ stack>0）
-in_hand: bool       # ハンドに参加中（ACTIVE or ALL_IN）
-```
+- 1プレイヤーのホールカードは常に2枚
+- デッキは重複カードを含まない
+- `SeatStatus.EMPTY` は `player is None` を意味
+- `ACTIVE/FOLDED/ALL_IN` は `player is not None` を前提
+- `bet_in_round` はラウンド切替時に 0 にリセット
+- `GameState.current_bet` はラウンド中の最大投入額（総額）
+- **スタック操作は必ず `Seat.pay()` を経由** し、負の値にならない
 
 ---
 
-### `table.py` - テーブル管理
-**共有状態（コミュニティカード・ポット・座席配列）**
+## 典型的な状態遷移
 
-#### 構造
-```python
-class Pot:
-    amount: int                  # ポット額
-    eligible_seats: List[int]    # このポットの対象座席
-
-class Table:
-    deck: Deck
-    seats: List[Seat]            # 座席配列
-    community_cards: List[Card]  # コミュニティカード（最大5枚）
-    pots: List[Pot]              # メインポット + サイドポット群
-```
-
-#### メソッド
-```python
-reset_for_new_hand():
-    """新ハンド用にデッキ・カード・ポットをリセット"""
-
-reset_for_new_round():
-    """新ラウンド用に各座席のbet_in_roundをリセット"""
-
-sit_player(player, seat_index):
-    """指定座席にプレイヤーを着席"""
-
-stand_player(seat_index):
-    """指定座席から退席"""
-
-in_hand_seats() -> List[Seat]:
-    """ハンド参加中の座席（ACTIVE or ALL_IN）"""
-
-active_seats() -> List[Seat]:
-    """アクション可能な座席（ACTIVE のみ）"""
-
-empty_seats() -> List[int]:
-    """空席のインデックス一覧"""
-```
-
-#### プロパティ
-```python
-total_pot: int          # 全ポットの合計額
-is_hand_over: bool      # ハンド終了判定（in_hand が1人以下）
-is_betting_over: bool   # ベッティング終了判定（active が1人以下）
-```
+1. **新ハンド開始**: `Table.reset_for_new_hand()` → 各 `Seat.clear_for_new_hand()`
+2. **ディーラーボタン回転・ブラインド設定**（サービス側）→ `GameState.dealer_seat_index` 等が更新
+3. **ホールカード配布**（サービス側）→ `Seat.receive_cards()`
+4. **ベットラウンド**: `Seat.pay()` でベット額更新、`current_bet` を同期
+5. **ラウンド終了**: `Table.reset_for_new_round()` → 各 `Seat.reset_for_new_round()`
+6. **ショーダウン**: ハンド評価 → ポット分配 → `GameState.status = HAND_COMPLETE`
 
 ---
 
-### `game_state.py` - ゲーム状態（集約ルート）⭐
-**ハンド全体の進行状態を一元管理**
+## サービス層との境界
 
-#### 主要プロパティ
-```python
-id: str                            # ゲームセッションID
-status: GameStatus                 # WAITING/IN_PROGRESS/HAND_COMPLETE
-current_round: Round               # PREFLOP/FLOP/TURN/RIVER/SHOWDOWN
-
-table: Table                       # テーブル参照
-players: List[Player]              # 全プレイヤー（着席/未着席含む）
-history: List[PlayerAction]        # アクション履歴
-
-# ブラインド・ベット設定
-big_blind: int                     # BBサイズ
-small_blind: int                   # SBサイズ
-current_bet: int                   # 現ラウンドの最大ベット額
-min_raise_amount: int              # 最小レイズ額（総額）
-last_raise_delta: int              # 最後のレイズ幅
-
-# ポジション
-dealer_seat_index: Optional[int]   # ディーラーボタン
-small_blind_seat_index: Optional[int]
-big_blind_seat_index: Optional[int]
-current_seat_index: Optional[int]  # 現在のアクション権
-last_aggressive_actor_index: Optional[int]  # 最後にBET/RAISEした座席
-
-# 結果
-winners: List[Dict]                # 勝者リスト
-valid_actions: List[Dict]          # 現在の有効アクション
-```
-
-#### メソッド
-```python
-add_player(player: Player):
-    """プレイヤーをセッションに追加"""
-
-remove_player_by_id(player_id: str):
-    """プレイヤーをセッションから削除（着席中なら退席も実行）"""
-
-get_player_by_id(player_id: str) -> Optional[Player]:
-    """IDでプレイヤー検索"""
-
-add_action(player_id, action_type, amount):
-    """アクションを履歴に追加"""
-
-clear_for_new_hand():
-    """新ハンド開始時の初期化"""
-
-clear_for_new_round():
-    """新ラウンド開始時の初期化"""
-```
+- **ドメイン**: 「何が正しい状態か」を表現し、操作の原子性や制約を担保
+- **サービス**: 「いつ・どの順序で行うか」を司り、入出力（プレイヤー操作、配布、通知）をまとめる
+- **スタック操作**: `Seat.pay()` を使用してドメインで整合性を保証
+- **配列操作**: `Deck.shuffle()`, `Deck.draw()` などの副作用はサービス側から呼び出し
 
 ---
 
-## 🔄 状態遷移フロー
+## リアルタイムシングルプレイ向け拡張指針
 
-### 新ハンド開始
-```
-1. GameState.clear_for_new_hand()
-   ↓
-2. Table.reset_for_new_hand()
-   ↓
-3. 各Seat.clear_for_new_hand()
-   ↓
-4. [Services層] ディーラーボタン回転・ブラインド設定
-   ↓
-5. [Services層] Seat.pay() でブラインド徴収
-   ↓
-6. [Services層] ホールカード配布 Seat.receive_cards()
-```
-
-### ベットラウンド
-```
-1. プレイヤーアクション
-   ↓
-2. Seat.pay() でベット実行
-   ↓
-3. GameState.current_bet 更新
-   ↓
-4. 次のプレイヤーへ
-   ↓
-5. 全員acted=True → ラウンド終了
-```
-
-### ラウンド終了
-```
-1. [Services] DealerService.collect_bets_to_pots()
-   - オールインなし → メインポットに追加
-   - オールインあり → サイドポット作成
-   ↓
-2. Table.reset_for_new_round()
-   ↓
-3. 各Seat.reset_for_new_round()
-   ↓
-4. コミュニティカード配布（FLOP/TURN/RIVER）
-```
-
-### ショーダウン
-```
-1. [Services] HandEvaluator で役評価
-   ↓
-2. Seat.hand_score に結果格納
-   ↓
-3. [Services] DealerService.calculate_pot_distribution()
-   ↓
-4. 勝者にチップ分配
-   ↓
-5. GameState.status = HAND_COMPLETE
-```
-
----
-
-## ⚠️ 不変条件・整合性ルール
-
-### 必ず守るべき制約
-1. ホールカードは常に2枚（0枚または2枚のみ許可）
-2. デッキに重複カードは存在しない
-3. `stack` は常に ≥ 0
-4. `SeatStatus.EMPTY` ⇔ `player is None`
-5. `bet_in_round` はラウンド切替時に0にリセット
-6. **スタック操作は必ず `Seat.pay()` を経由**
-
-### ポット管理の整合性（重要）
-- **オールインなし**: メインポットに追加（既存ポットを保持）
-- **オールインあり**: サイドポット作成（既存ポットは維持）
-- **ラウンドごとにポットをクリアしない**
-
----
-
-## 🎮 シングルプレイWebアプリ向け拡張指針
-
-### 1. AI戦略の多様化
+### 1. AI対戦相手の強化
 ```python
-# player.py
+# player.py に追加
 class Player:
     ai_difficulty: str = "medium"  # easy/medium/hard
-    ai_personality: str = "balanced"  # tight/loose/aggressive/maniac
-    
-# services層でAI判断に使用
-def ai_decide_action(player: Player, game: GameState) -> ActionType:
-    if player.ai_difficulty == "easy":
-        # ランダム戦略
-    elif player.ai_difficulty == "hard":
-        # GTO近似戦略
+    ai_strategy: Optional[str] = None  # tight/loose/aggressive
 ```
 
-### 2. アニメーション・UI制御
+### 2. ゲーム速度制御
 ```python
-# game_state.py
+# game_state.py に追加
 class GameState:
     animation_speed: float = 1.0  # 0.5-2.0
-    auto_action_delay: float = 1.5  # AI行動の遅延（秒）
-    show_ai_thinking: bool = True
+    auto_fold_timeout: int = 30  # 秒
+    fast_forward_enabled: bool = False
 ```
 
-### 3. 統計・履歴トラッキング
+### 3. プレイヤー統計トラッキング
 ```python
-# seat.py
+# seat.py に追加
 class SeatStatistics:
     hands_played: int = 0
     vpip: float = 0.0  # Voluntarily Put In Pot
     pfr: float = 0.0   # Pre-Flop Raise
     aggression_factor: float = 0.0
-    
-# game_state.py
-hand_history: List[Dict] = []  # リプレイ用の全アクション記録
 ```
 
-### 4. チュートリアル・ヒント機能
+### 4. リプレイ機能
 ```python
-# services層
+# game_state.py に追加
+class GameState:
+    hand_history: List[Dict] = []  # 全アクション履歴
+    replay_enabled: bool = True
+```
+
+### 5. チュートリアル・ヒント機能
+```python
+# 推奨アクションの計算
 def suggest_action(game: GameState, seat: Seat) -> Dict:
-    """初心者向けの推奨アクション計算"""
-    pot_odds = calculate_pot_odds(game)
     return {
         "action": ActionType.CALL,
-        "reason": "good_pot_odds",
-        "confidence": 0.75,
-        "explanation": "ポットオッズが有利です"
+        "reason": "pot_odds_favorable",
+        "confidence": 0.75
     }
 ```
 
-### 5. リアルタイム通信用のイベント
-```python
-# services層からWebSocketへ送信するイベント
-{
-    "type": "game_state_update",
-    "round": "FLOP",
-    "current_seat": 1,
-    "pot": 300,
-    "community_cards": ["A♠", "K♥", "Q♦"]
-}
-```
+---
+
+## 拡張指針（一般）
+
+- **ルール差し替え**: ブラインド額/最小レイズ幅/テーブルサイズは設定オブジェクト化して `GameState` に注入
+- **役判定の強化**: 現在は treys を使用。別評価器へ差し替えしやすいよう `Card.to_treys_int()` は維持
+- **ショートハンド/ヘッズアップ特則**: `Position` 付与ロジックはサービス側に実装
+- **マルチテーブル**: `GameState` を複数管理し、各テーブルで独立した進行を実現
 
 ---
 
-## 🛠️ Services層開発のガイドライン
+## 学習の観点での読み方
 
-### Services層が担当すること
-1. **進行制御**: ハンド・ラウンドの開始/終了タイミング
-2. **AI判断**: AIプレイヤーのアクション決定
-3. **役評価**: treys等を使った役判定
-4. **通知送信**: WebSocket経由でクライアントに状態通知
-5. **タイマー管理**: AIの思考時間・タイムアウト処理
+1. **enum.py**: 用語とステート定義を把握
+2. **seat.py**: 個別座席の状態管理と `pay()` メソッド
+3. **table.py**: 座席の集合とコミュニティ情報
+4. **game_state.py**: 全体の集約ルートとハンド進行
+5. **deck.py / action.py**: 小さな値オブジェクト
 
-### Domainを呼び出す際の注意
-```python
-# ✅ 正しい使い方
-seat.pay(amount)  # スタック操作は必ずpay()経由
-
-# ❌ 間違った使い方
-seat.stack -= amount  # 直接変更は禁止（整合性が壊れる）
-seat.bet_in_round += amount
-```
-
-### ポット管理の正しい実装
-```python
-# ✅ 正しい（dealer_service.py参照）
-def collect_bets_to_pots(game: GameState):
-    if not all_in_seats:
-        # メインポットに追加（既存を保持）
-        game.table.pots[0].amount += total_bets
-    else:
-        # サイドポット作成（既存を保持）
-        self._create_side_pots(...)
-
-# ❌ 間違い
-game.table.pots = []  # 毎回クリアすると過去のポットが消える
-```
-
----
-
-## 📖 学習推奨順序
-
-### Step 1: 基本概念の理解
-1. `enum.py` - 用語・状態定義
-2. `player.py` - プレイヤーの最小情報
-3. `deck.py` - カード表現
-
-### Step 2: 状態管理の理解
-4. `seat.py` - 座席の状態と `pay()` の重要性
-5. `table.py` - 座席の集合とポット管理
-6. `action.py` - アクションの記録
-
-### Step 3: 全体像の把握
-7. `game_state.py` - 集約ルートとして全体を統合
-
-### Step 4: Services層へ
-この順序で読めば、Services層のコード（`dealer_service.py`、`game_service.py`等）の意図が理解できます。
-
----
-
-## 🎯 開発目標の達成チェックリスト
-
-- [ ] 1人プレイヤー vs 複数AI の対戦実装
-- [ ] リアルタイムWebSocket通信
-- [ ] フロントエンドへの状態同期
-- [ ] AIの自動アクション（遅延付き）
-- [ ] アニメーション対応
-- [ ] ハンド履歴・統計表示
-- [ ] チュートリアル・ヒント機能
-- [ ] レスポンシブUI（スマホ対応）
-
----
-
-**このREADMEは、Services層開発時にAIに渡すことで、Domain層の設計意図と使用方法を正確に伝えることを目的としています。**
+この順で読むと、サービス層のコード（進行/配布/評価）を理解する際の前提がクリアになります。

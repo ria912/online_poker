@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from ..domain.game_state import GameState
 from ..domain.seat import Seat
 from ..domain.enum import SeatStatus, Round, ActionType
@@ -59,6 +59,18 @@ class TurnManager:
         game.table.reset_for_new_round()
         game.current_bet = 0
         game.last_aggressive_actor_index = None
+
+    def is_betting_round_complete(self, game: GameState) -> bool:
+        """ベッティングラウンド終了判定（サービス側で一元化）"""
+        active_seats = game.table.active_seats()
+        if len(active_seats) <= 1:
+            return True
+        for seat in active_seats:
+            if not seat.acted:
+                return False
+            if seat.bet_in_round != game.current_bet:
+                return False
+        return True
     
     def _set_first_actor_preflop(self, game: GameState) -> None:
         """プリフロップの最初のアクターを設定（UTG）"""
@@ -84,12 +96,9 @@ class TurnManager:
                 return next_index
         return None
     
-    def get_valid_actions_for_player(self, game: GameState, player_id: str) -> List[Dict[str, Any]]:
-        """
-        プレイヤーの有効なアクションリストを取得(リッチな情報を含む)
-        返り値: [{"type": ActionType, "amount"?: int, "min_amount"?: int, "max_amount"?: int}]
-        """
-        seat = game.table.get_seat_by_player_id(player_id)
+    def get_valid_actions_for_player(self, game: GameState, player_id: str) -> List[ActionType]:
+        """プレイヤーの有効なアクションリストを取得"""
+        seat = self._find_player_seat(game, player_id)
         if not seat or not seat.is_active:
             return []
         
@@ -97,39 +106,32 @@ class TurnManager:
         if game.current_seat_index != seat.index:
             return []
         
-        valid_actions: List[Dict[str, Any]] = []
+        valid_actions: List[ActionType] = []
         
         # フォールドは常に可能
-        valid_actions.append({"type": ActionType.FOLD})
+        valid_actions.append(ActionType.FOLD)
 
         # コール/チェック
         call_amount = game.current_bet - seat.bet_in_round
         if call_amount == 0:
-            valid_actions.append({"type": ActionType.CHECK})
+            valid_actions.append(ActionType.CHECK)
         elif seat.stack >= call_amount:
-            # CALLに必要な額を明記
-            valid_actions.append({"type": ActionType.CALL, "amount": call_amount})
+            valid_actions.append(ActionType.CALL)
         
         # ベット/レイズ
         if game.current_bet == 0:
-            # BETの最小・最大額を明記
-            min_bet = game.big_blind
-            max_bet = seat.stack
-            if max_bet >= min_bet:
-                valid_actions.append({
-                    "type": ActionType.BET, 
-                    "min_amount": min_bet, 
-                    "max_amount": max_bet
-                })
+            if seat.stack > 0:
+                valid_actions.append(ActionType.BET)
         else:
-            # RAISEの最小・最大額を明記
-            min_raise_amount = game.current_bet + max(game.last_raise_delta, game.big_blind)
-            available_to_raise = seat.stack + seat.bet_in_round
-            if available_to_raise >= min_raise_amount:
-                valid_actions.append({
-                    "type": ActionType.RAISE, 
-                    "min_amount": min_raise_amount, 
-                    "max_amount": available_to_raise
-                })
+            needed = max(0, (game.current_bet + game.big_blind) - seat.bet_in_round)
+            if seat.stack >= needed:
+                valid_actions.append(ActionType.RAISE)
 
         return valid_actions
+    
+    def _find_player_seat(self, game: GameState, player_id: str) -> Optional[Seat]:
+        """プレイヤーIDから座席を検索"""
+        for seat in game.table.seats:
+            if seat.is_occupied and seat.player and seat.player.id == player_id:
+                return seat
+        return None
