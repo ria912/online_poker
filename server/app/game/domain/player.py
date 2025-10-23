@@ -1,5 +1,5 @@
 # app/game/domain/player.py
-from typing import Optional
+from typing import Optional, List
 from .deck import Card
 
 class Player:
@@ -7,3 +7,4 @@ class Player:
         self.id: str = player_id
         self.name: str = name
         self.is_ai: bool = is_ai
+        self.messages: List[str] = []  # チャットメッセージ履歴

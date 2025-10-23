@@ -36,11 +36,13 @@ class Seat:
         return self.is_occupied and self.status in {SeatStatus.ACTIVE, SeatStatus.ALL_IN}
     
     def pay(self, amount: int) -> int:
-        """支払いを実行し、実際の支払額を返す（整合性を一元管理）"""
+        """支払いを実行し、実際の支払額を返す"""
         actual = min(amount, self.stack)
         self.stack -= actual
         self.bet_in_round += actual
         self.bet_in_hand += actual
+        if self.stack == 0:
+            self.status = SeatStatus.ALL_IN
         return actual
     
     def refund(self, amount: int) -> None:

@@ -65,11 +65,6 @@ class GameState:
             except ValueError:
                 print(f"GameState.remove_player_by_id: attempted to remove non-existent player for t_id={player_id}")
 
-    def add_action(self, player_id: str, action_type: ActionType, amount: Optional[int] = None):
-        """アクションを履歴に追加する"""
-        action = PlayerAction(player_id=player_id, action_type=action_type, amount=amount)
-        self.history.append(action)
-
     def clear_for_new_hand(self):
         """次のハンドのためにゲーム状態をリセットする"""
         self.table.reset_for_new_hand()
@@ -88,4 +83,8 @@ class GameState:
         self.amount_to_call = 0
         self.min_raise_amount = self.big_blind
         self.last_raise_delta = self.big_blind
-        self.is_bet_in_round = False
+    
+    def add_action(self, player_id: str, action_type: ActionType, amount: Optional[int] = None):
+        """アクションを履歴に追加する"""
+        action = PlayerAction(player_id=player_id, action_type=action_type, amount=amount)
+        self.history.append(action)

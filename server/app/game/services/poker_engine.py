@@ -4,19 +4,19 @@ from ..domain.player import Player
 from ..domain.seat import Seat
 from ..domain.action import PlayerAction
 from ..domain.enum import ActionType, GameStatus, Round
-from .hand_service import HandService
 from .action_service import ActionService
 from .turn_manager import TurnManager
 from .dealer_service import DealerService
+from .showdown_service import ShowdownService
 
 class PokerEngine:
     """ポーカーの核となるゲームロジック"""
     
     def __init__(self):
-        self.hand_service = HandService()
         self.action_service = ActionService()
         self.turn_manager = TurnManager()
         self.dealer_service = DealerService()
+        self.showdown_service = ShowdownService()
     
     def start_new_hand(self, game: GameState) -> bool:
         """新しいハンドを開始"""
@@ -53,8 +53,20 @@ class PokerEngine:
         # アクション履歴に追加
         game.history.append(action)
         
+        # ハンド終了チェック（誰か1人だけが残った場合）
+        if game.table.is_hand_over:
+            winners = self.showdown_service.handle_hand_resolution(game, self.dealer_service)
+            game.winners = winners
+            return True
+        
+        # ベッティング終了チェック（アクティブ1人 + オールイン）
+        if game.table.is_betting_over:
+            winners = self.showdown_service.handle_hand_resolution(game, self.dealer_service)
+            game.winners = winners
+            return True
+        
         # 次のアクターに進む
-        round_continues = self.turn_manager.advance_turn(game)
+        round_continues = self.turn_manager.advance_to_next_actor(game)
         
         # ベッティングラウンド終了チェック
         if not round_continues:
@@ -111,35 +123,27 @@ class PokerEngine:
         # 次のラウンドに進む
         if game.current_round == Round.PREFLOP:
             game.current_round = Round.FLOP
-            self.dealer_service.deal_community_cards(game, Round.PREFLOP)
+            self.dealer_service.deal_community_cards(game)
         elif game.current_round == Round.FLOP:
             game.current_round = Round.TURN
-            self.dealer_service.deal_community_cards(game, Round.FLOP)
+            self.dealer_service.deal_community_cards(game)
         elif game.current_round == Round.TURN:
             game.current_round = Round.RIVER
-            self.dealer_service.deal_community_cards(game, Round.TURN)
+            self.dealer_service.deal_community_cards(game)
         elif game.current_round == Round.RIVER:
             self._proceed_to_showdown(game)
             return
         
         # 新しいラウンドの最初のアクター設定
-        self.turn_manager.start_round(game)
+        self.turn_manager.set_first_actor_for_round(game)
     
     def _proceed_to_showdown(self, game: GameState) -> None:
         """ショーダウンに進む"""
         game.current_round = Round.SHOWDOWN
         
-        # ハンドに参加している全プレイヤーのカードを公開
-        in_hand_seats = [seat for seat in game.table.seats if seat.in_hand]
-        for seat in in_hand_seats:
-            seat.show_hand = True
-        
-        # ハンド評価とポット分配
-        winners = self.hand_service.evaluate_showdown(game)
+        # ショーダウン処理
+        winners = self.showdown_service.evaluate_showdown(game)
         game.winners = winners
-        
-        # ゲーム終了処理
-        game.status = GameStatus.HAND_COMPLETE
     
     def _is_valid_action(self, game: GameState, action: PlayerAction) -> bool:
         """アクションが有効かチェック"""

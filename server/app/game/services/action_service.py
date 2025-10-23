@@ -7,7 +7,7 @@ class ActionService:
     """アクション関連のビジネスロジック"""
 
     async def execute_action(self, game: GameState, action: PlayerAction) -> bool:
-        """アクションを実行"""
+        """アクションを適用"""
         seat = self._find_player_seat(game, action.player_id)
         if not seat:
             return False
@@ -34,7 +34,7 @@ class ActionService:
                 bet_amount = seat.pay(action.amount)
                 seat.last_action = ActionType.BET
                 seat.acted = True
-                if bet_amount > game.last_raise_delta:
+                if bet_amount >= game.big_blind:
                     game.last_raise_delta = bet_amount
                     self._reset_acted_flags_after_raise(game, seat.index)
 
@@ -82,7 +82,7 @@ class ActionService:
             # リオープンされていない場合、レイズ不可
             if seat.acted:
                 return False
-            return (seat.stack + seat.bet_in_round) >= action.amount > game.current_bet
+            return action.amount > game.current_bet and action.amount <= (seat.stack + seat.bet_in_round)
 
     def _find_player_seat(self, game: GameState, player_id: str):
         """プレイヤーIDから座席を検索"""
