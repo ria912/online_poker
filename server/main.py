@@ -4,7 +4,7 @@ FastAPIアプリケーションのエントリーポイント
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from app.websocket import chat_router
+from app.websocket import chat_router, game_router
 import logging
 import os
 
@@ -35,6 +35,7 @@ app.add_middleware(
 
 # WebSocketルーターを追加
 app.include_router(chat_router, tags=["WebSocket Chat"])
+app.include_router(game_router, tags=["WebSocket Game"])
 
 # 静的ファイルの提供（React本番ビルド用）
 # client/distディレクトリが存在する場合のみマウント

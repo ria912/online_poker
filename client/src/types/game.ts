@@ -32,6 +32,6 @@ export interface GameState {
 }
 
 export interface WebSocketMessage {
-  type: 'game_state' | 'player_action' | 'chat' | 'system' | 'message' | 'user_joined' | 'user_left' | 'room_info';
+  type: 'game_state' | 'player_action' | 'chat' | 'system' | 'message' | 'user_joined' | 'user_left' | 'room_info' | 'connected' | 'player_joined' | 'player_left';
   [key: string]: any;
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { GameState, Player, Card } from '../types/game';
+import { useGameWebSocket } from '../hooks/useGameWebSocket';
 import './GamePage.css';
 
 interface GamePageProps {
@@ -9,8 +10,27 @@ interface GamePageProps {
 
 export default function GamePage({ username, onExitGame }: GamePageProps) {
   // TODO: WebSocketからのゲーム状態更新で_setGameStateを使用
-  const [gameState, _setGameState] = useState<GameState>(initializeGame(username));
+  const [gameState, setGameState] = useState<GameState>(initializeGame(username));
   const [betAmount, setBetAmount] = useState(40);
+
+  // WebSocket接続
+  const { sendAction, sendChat: _sendChat, isConnected } = useGameWebSocket({
+    gameId: 'single-player-1', // シングルプレイ用のゲームID
+    username,
+    onGameStateUpdate: (state) => {
+      console.log('Game state updated:', state);
+      setGameState(state);
+    },
+    onPlayerAction: (data) => {
+      console.log('Player action:', data);
+    },
+    onChatMessage: (user, message) => {
+      console.log(`Chat from ${user}: ${message}`);
+    },
+    onSystemMessage: (message) => {
+      console.log('System message:', message);
+    },
+  });
 
   // 初期ゲーム状態を作成
   function initializeGame(playerName: string): GameState {
@@ -67,7 +87,13 @@ export default function GamePage({ username, onExitGame }: GamePageProps) {
 
   const handleAction = (action: string) => {
     console.log('Action:', action);
-    // TODO: サーバーにアクションを送信
+    
+    // WebSocketでサーバーにアクションを送信
+    if (action === 'raise') {
+      sendAction(action, betAmount);
+    } else {
+      sendAction(action);
+    }
   };
 
   const handleExit = () => {
@@ -84,6 +110,12 @@ export default function GamePage({ username, onExitGame }: GamePageProps) {
       {/* ヘッダー */}
       <div className="game-header">
         <div className="game-info">
+          <div className="info-item">
+            <span className="info-label">接続状態</span>
+            <span className={`info-value ${isConnected ? 'connected' : 'disconnected'}`}>
+              {isConnected ? '🟢 接続中' : '🔴 切断'}
+            </span>
+          </div>
           <div className="info-item">
             <span className="info-label">ブラインド</span>
             <span className="info-value">${gameState.smallBlind}/${gameState.bigBlind}</span>
