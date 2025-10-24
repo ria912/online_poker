@@ -59,7 +59,6 @@ class Seat:
 
     def reset_for_new_round(self) -> None:
         """新しいベッティングラウンドのために座席の状態をリセットする"""
-        self.bet_in_round = 0
         if self.is_active:
             self.last_action = None
             self.acted = False

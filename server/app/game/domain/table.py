@@ -25,6 +25,16 @@ class Table:
     def total_pot(self) -> int:
         """現在のすべてのポットの合計額を計算する"""
         return sum(pot.amount for pot in self.pots)
+    
+    @property
+    def main_pot(self) -> Pot:
+        """メインポット(最初のポット)を返す"""
+        return self.pots[0] if self.pots else Pot()
+    
+    @property
+    def side_pots(self) -> List[Pot]:
+        """サイドポット一覧を返す"""
+        return self.pots[1:] if len(self.pots) > 1 else []
 
     @property
     def is_hand_over(self) -> bool:

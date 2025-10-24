@@ -42,7 +42,7 @@ class PokerEngine:
 
     async def process_action(self, game: GameState, action: PlayerAction) -> bool:
         """プレイヤーアクションを処理"""
-        if not self._is_valid_action(game, action):
+        if not self.action_service.is_valid_action(game, action):
             return False
         
         # アクションを実行
@@ -144,26 +144,7 @@ class PokerEngine:
         # ショーダウン処理
         winners = self.showdown_service.evaluate_showdown(game)
         game.winners = winners
-    
-    def _is_valid_action(self, game: GameState, action: PlayerAction) -> bool:
-        """アクションが有効かチェック"""
-        # 基本的な検証
-        if game.status != GameStatus.IN_PROGRESS:
-            return False
-        
-        # プレイヤーが存在するかチェック
-        seat = self._find_player_seat(game, action.player_id)
-        if not seat:
-            return False
-        
-        # ターンマネージャーで有効なアクションかチェック
-        valid_actions = self.turn_manager.get_valid_actions(game, seat.index)
-        if action.action_type not in valid_actions:
-            return False
-        
-        # アクションサービスに詳細検証を委譲
-        return self.action_service.is_valid_action(game, action)
-    
+
     def _find_player_seat(self, game: GameState, player_id: str) -> Optional[Seat]:
         """プレイヤーIDから座席を検索"""
         for seat in game.table.seats:

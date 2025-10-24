@@ -88,19 +88,10 @@ class ShowdownService:
         
         Args:
             game: ゲーム状態
-            dealer_service: DealerServiceインスタンス（オプション）
             
         Returns:
             勝者情報のリスト
         """
-        from .dealer_service import DealerService
-        if dealer_service is None:
-            dealer_service = DealerService()
-        
-        # ベットをポットに回収
-        dealer_service.collect_bets_to_pots(game)
-        
-        # 残っているプレイヤーが1人だけの場合（フォールドによる勝利）
         in_hand_seats = game.table.in_hand_seats()
         
         if len(in_hand_seats) == 1:
