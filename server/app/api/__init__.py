@@ -1,8 +1,3 @@
-from fastapi import APIRouter
-from .router import router as game_router
+from .game_api import router as game_api_router
 
-# メインAPIルーター
-router = APIRouter()
-
-# 各機能のルーターを追加
-router.include_router(game_router, prefix="/games", tags=["games"])
+__all__ = ["game_api_router"]

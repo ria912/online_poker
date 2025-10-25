@@ -14,6 +14,7 @@ online_poker/
 │
 └── server/          # FastAPI バックエンド
     ├── app/
+    │   ├── api/
     │   ├── websocket/
     │   ├── game/
     │   └── core/

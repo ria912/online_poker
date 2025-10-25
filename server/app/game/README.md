@@ -11,7 +11,6 @@ game/
 ├── README.md              # このファイル（統合ガイド）
 ├── __init__.py
 ├── domain/                # ビジネスルールの中核
-│   ├── README.md         # ドメイン層の詳細ガイド
 │   ├── action.py         # プレイヤーアクション（値オブジェクト）
 │   ├── deck.py           # カードとデッキ
 │   ├── enum.py           # 列挙型（ラウンド/ステータス/アクション/ポジション）
@@ -19,14 +18,16 @@ game/
 │   ├── player.py         # プレイヤーエンティティ
 │   ├── seat.py           # 座席の状態管理
 │   └── table.py          # テーブル・ポット・共有状態
+├── logic/                # ゲームルール・アルゴリズム
+│   ├── hand_evaluator.py # ハンド評価（treys使用）
+│   └── pot_manager.py    # ポット計算・サイドポット管理
 └── services/             # ゲーム進行のオーケストレーション
-    ├── README.md         # サービス層の詳細ガイド
     ├── action_service.py # アクション適用と検証
+    ├── ai_service.py     # AIプレイヤーのアクション決定
     ├── dealer_service.py # ディーラー責務（配布/ブラインド/ポット）
     ├── game_service.py   # ゲームセッション管理
-    ├── hand_evaluator.py # ハンド評価（treys）
-    ├── hand_service.py   # ショーダウン処理
     ├── poker_engine.py   # コア進行エンジン
+    ├── showdown_service.py # ショーダウン処理
     └── turn_manager.py   # ターン管理とアクター選定
 ```
 
@@ -39,13 +40,18 @@ game/
 ```
 ┌─────────────────────────────────────────┐
 │  API / WebSocket Layer                  │  ← 外部インターフェース
-│  (router.py)                            │
+│  (routes.py, serializers.py)           │
 └─────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────┐
 │  Services Layer                         │  ← ゲーム進行の編成
 │  (game_service, poker_engine, etc.)    │     ・いつ何をするか
 └─────────────────────────────────────────┘     ・副作用の集約
+              ↓
+┌─────────────────────────────────────────┐
+│  Logic Layer                            │  ← アルゴリズム・計算
+│  (hand_evaluator, pot_manager)         │     ・ハンド評価・ポット計算
+└─────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────┐
 │  Domain Layer                           │  ← ビジネスルールの真実
@@ -55,8 +61,8 @@ game/
 
 ### 設計原則
 
-- **関心の分離**: ドメインは「ルール」、サービスは「進行」、APIは「通信」
-- **依存の方向**: サービス → ドメイン（逆方向の依存は禁止）
+- **関心の分離**: ドメインは「ルール」、ロジックは「アルゴリズム」、サービスは「進行」、APIは「通信」
+- **依存の方向**: API → Services → Logic → Domain（下位層への依存のみ）
 - **集約の明確化**: `GameState` が唯一の真実の情報源（Single Source of Truth）
 - **純粋性の追求**: ドメインは副作用なし、サービスで副作用を局所化
 
@@ -71,7 +77,11 @@ game/
 - **状態遷移ルール**: 新ハンド/新ラウンド時のリセット、座席ステータス管理
 - **クエリ提供**: アクティブ座席、ハンド参加者、ラウンド終了判定
 
-**詳細**: [`domain/README.md`](./domain/README.md)
+### ロジック層の責務
+
+- **ハンド評価**: treys ライブラリを使用した役判定と強さ比較
+- **ポット計算**: メインポット・サイドポットの作成と分配計算
+- **純粋な計算**: 入力から出力を決定論的に返す（副作用なし）
 
 ### サービス層の責務
 
@@ -79,8 +89,9 @@ game/
 - **副作用の実行**: シャッフル、配布、ベット回収、通知トリガー
 - **入力検証**: 有効なアクションか、現在のターンか
 - **ビジネスフロー**: ディーラーボタン回転、ブラインド徴収、ショーダウン
+- **AI制御**: AIプレイヤーの自動アクション決定
 
-**詳細**: [`services/README.md`](./services/README.md)
+**詳細**: 各サービスのdocstringを参照
 
 ---
 
@@ -100,7 +111,7 @@ await game_service.join_game("table_1", player2)
 
 ```python
 # PokerEngine が DealerService/TurnManager を統合
-await game_service.start_game("table_1")
+success = await game_service.start_game("table_1")
 # → ボタン回転 → ブラインド → ホールカード配布 → 最初のアクター設定
 ```
 
@@ -122,7 +133,7 @@ await game_service.process_player_action(
 ```python
 # ベッティング完了後、自動でフロップ/ターン/リバー配布
 # 最終ラウンド終了後、ショーダウンへ
-# → HandService でハンド評価 → 勝者確定 → ポット分配
+# → ShowdownService でハンド評価 → 勝者確定 → ポット分配
 ```
 
 ---
@@ -159,16 +170,18 @@ await game_service.process_player_action(
 
 ### すぐに実装可能
 
-- **ポジション付与**: `PositionService.assign_positions()` をハンドセットアップに統合
+- **ポジション付与**: `Position` enum を活用した座席ポジション表示
 - **ログ/監査**: アクション履歴を構造化ログに出力
 - **テスト**: シナリオベーステスト（2-3人、プリフロップ→ショーダウン）
+- **AI戦略改善**: 現在は保守的戦略、ハンド強度に応じた判断に拡張
 
 ### 中期的な拡張
 
 - **ルール設定**: ブラインド構造/アンティ/ミニマムレイズを設定オブジェクト化
-- **AI プレイヤー**: `Player.is_ai` を活用した自動アクション
+- **AI高度化**: ポットオッズ、ポジション、相手の傾向を考慮した戦略
 - **マルチテーブル**: 同一プレイヤーが複数 `GameState` に参加
 - **リバイ/アドオン**: `Seat.stack` への追加購入処理
+- **統計記録**: プレイヤーごとのVPIP/PFR/AGGなどの統計
 
 ### 長期的な拡張
 
@@ -192,8 +205,9 @@ await game_service.process_player_action(
 
 1. **ラウンド遷移**: `TurnManager` と `DealerService` の連携を把握
 2. **アクション検証**: `ActionService.is_valid_action()` のルールを整理
-3. **ポット計算**: `DealerService.collect_bets_to_pots()` のサイドポット処理
-4. **ショーダウン**: `HandService` と `HandEvaluator` の役割分担
+3. **ポット計算**: `PotManager.collect_bets_to_pots()` のサイドポット処理
+4. **ショーダウン**: `ShowdownService` と `HandEvaluator` の役割分担
+5. **AI実装**: `AIService.decide_action()` の戦略ロジック
 
 ### 上級者向け
 
@@ -201,6 +215,7 @@ await game_service.process_player_action(
 2. **並行性の考慮**: 複数テーブル同時進行時の状態管理
 3. **パフォーマンス**: ハンド評価のキャッシュ、状態更新の最適化
 4. **拡張実装**: トーナメント/オマハへの拡張設計
+5. **AI戦略**: Monte Carlo シミュレーション、Nash均衡戦略
 
 ---
 
@@ -224,8 +239,9 @@ await game_service.process_player_action(
 
 ## 参考資料
 
-- **ドメイン層**: [`domain/README.md`](./domain/README.md)
-- **サービス層**: [`services/README.md`](./services/README.md)
+- **実装ガイド**: [`IMPLEMENTATION_GUIDE.md`](../../IMPLEMENTATION_GUIDE.md)
+- **WebSocket API**: [`WEBSOCKET_API_GUIDE.md`](../../WEBSOCKET_API_GUIDE.md)
+- **AI使用法**: [`services/AI_USAGE.md`](./services/AI_USAGE.md)
 - **テキサスホールデムルール**: [公式ポーカールール](https://www.pokernews.com/poker-rules/texas-holdem.htm)
 - **treys ライブラリ**: [GitHub - worldveil/treys](https://github.com/worldveil/treys)
 

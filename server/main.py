@@ -4,7 +4,8 @@ FastAPIアプリケーションのエントリーポイント
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from app.websocket import chat_router, game_router
+from app.websocket import router as websocket_router
+from app.api.game_api import router as game_api_router
 import logging
 import os
 
@@ -33,9 +34,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# WebSocketルーターを追加
-app.include_router(chat_router, tags=["WebSocket Chat"])
-app.include_router(game_router, tags=["WebSocket Game"])
+# ルーターを追加
+app.include_router(game_api_router)  # REST API
+app.include_router(websocket_router)  # WebSocket
 
 # 静的ファイルの提供（React本番ビルド用）
 # client/distディレクトリが存在する場合のみマウント
@@ -59,8 +60,22 @@ async def api_info():
     return {
         "name": "Online Poker Game API",
         "version": "1.0.0",
-        "websocket_endpoints": {
-            "chat": "/ws/chat/{room_id}",
+        "description": "Texas Hold'em Poker single play with AI opponents",
+        "endpoints": {
+            "rest_api": {
+                "create_game": "POST /api/games/single-play",
+                "get_game": "GET /api/games/{game_id}",
+                "delete_game": "DELETE /api/games/{game_id}"
+            },
+            "websocket": {
+                "game": "WS /ws/game/{game_id}?username={username}"
+            }
+        },
+        "usage": {
+            "step1": "POST /api/games/single-play to create a game",
+            "step2": "Connect to WS /ws/game/{game_id}?username=YOUR_NAME",
+            "step3": "Send {type: 'start_game'} to begin",
+            "step4": "Send {type: 'player_action', action: 'CALL|CHECK|FOLD', amount: 0} to play"
         }
     }
 

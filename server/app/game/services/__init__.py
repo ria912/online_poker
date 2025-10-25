@@ -4,6 +4,7 @@ from .showdown_service import ShowdownService
 from .action_service import ActionService
 from .turn_manager import TurnManager
 from .dealer_service import DealerService
+from .ai_service import AIService
 
 __all__ = [
     "GameService",
@@ -11,5 +12,6 @@ __all__ = [
     "ShowdownService",
     "ActionService",
     "TurnManager",
-    "DealerService"
+    "DealerService",
+    "AIService"
 ]
