@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Poker - Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .section h2 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        input, button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        input {
+            flex: 1;
+            min-width: 200px;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .action-btn {
+            background: #2196F3;
+        }
+
+        .action-btn:hover:not(:disabled) {
+            background: #0b7dda;
+        }
+
+        .fold-btn {
+            background: #f44336;
+        }
+
+        .fold-btn:hover:not(:disabled) {
+            background: #da190b;
+        }
+
+        #log {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid #4CAF50;
+            padding-left: 10px;
+        }
+
+        .log-error {
+            border-left-color: #f44336;
+            color: #ff6b6b;
+        }
+
+        .log-success {
+            border-left-color: #4CAF50;
+            color: #69f0ae;
+        }
+
+        .log-info {
+            border-left-color: #2196F3;
+            color: #64b5f6;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .status.connected {
+            background: #4CAF50;
+        }
+
+        .status.disconnected {
+            background: #f44336;
+        }
+
+        .game-state {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .game-state h3 {
+            margin-bottom: 10px;
+            color: #FFD700;
+        }
+
+        .game-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .info-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .info-label {
+            color: #aaa;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .seats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .seat {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            border: 2px solid transparent;
+        }
+
+        .seat.active {
+            border-color: #FFD700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .seat.current {
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        .seat-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .player-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .player-stack {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .cards {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .card.hidden {
+            background: #333;
+            color: #333;
+        }
+
+        .community-cards {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+        }
+
+        .community-cards .card {
+            font-size: 20px;
+            padding: 10px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎰 Online Poker Test Client</h1>
+
+        <!-- ゲーム作成 -->
+        <div class="section">
+            <h2>1. ゲーム作成</h2>
+            <div class="controls">
+                <input type="number" id="bigBlind" value="100" placeholder="Big Blind" min="10">
+                <input type="number" id="buyIn" value="10000" placeholder="Buy In" min="1000">
+                <button onclick="createGame()">ゲーム作成</button>
+            </div>
+            <div id="gameIdDisplay"></div>
+        </div>
+
+        <!-- WebSocket接続 -->
+        <div class="section">
+            <h2>2. WebSocket接続 <span class="status disconnected" id="wsStatus">未接続</span></h2>
+            <div class="controls">
+                <input type="text" id="gameId" placeholder="Game ID">
+                <input type="text" id="username" value="Player1" placeholder="Username">
+                <button onclick="connectWebSocket()">接続</button>
+                <button onclick="disconnectWebSocket()">切断</button>
+            </div>
+        </div>
+
+        <!-- ゲーム操作 -->
+        <div class="section">
+            <h2>3. ゲーム操作</h2>
+            <div class="controls">
+                <button onclick="startGame()" id="startBtn">ゲーム開始</button>
+                <button onclick="getState()">状態取得</button>
+            </div>
+            <div class="controls">
+                <button class="action-btn" onclick="playerAction('CHECK')" id="checkBtn">Check</button>
+                <button class="action-btn" onclick="playerAction('CALL')" id="callBtn">Call</button>
+                <button class="fold-btn" onclick="playerAction('FOLD')" id="foldBtn">Fold</button>
+                <input type="number" id="betAmount" placeholder="ベット額" value="200" min="0">
+                <button class="action-btn" onclick="playerAction('BET')" id="betBtn">Bet</button>
+                <button class="action-btn" onclick="playerAction('RAISE')" id="raiseBtn">Raise</button>
+            </div>
+        </div>
+
+        <!-- ゲーム状態表示 -->
+        <div class="section">
+            <h2>4. ゲーム状態</h2>
+            <div class="game-state" id="gameState">
+                <p style="color: #aaa;">ゲームに接続すると状態が表示されます</p>
+            </div>
+        </div>
+
+        <!-- ログ -->
+        <div class="section">
+            <h2>5. ログ</h2>
+            <button onclick="clearLog()" style="margin-bottom: 10px;">ログクリア</button>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentGameId = null;
+        let currentGameState = null;
+
+        // ログ出力
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // ゲーム作成
+        async function createGame() {
+            const bigBlind = parseInt(document.getElementById('bigBlind').value);
+            const buyIn = parseInt(document.getElementById('buyIn').value);
+
+            try {
+                log('ゲーム作成中...', 'info');
+                const response = await fetch('/api/games/single-play', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ big_blind: bigBlind, buy_in: buyIn })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentGameId = data.game_id;
+                    document.getElementById('gameId').value = currentGameId;
+                    document.getElementById('gameIdDisplay').innerHTML = 
+                        `<strong>Game ID:</strong> ${currentGameId}<br>` +
+                        `<strong>AI Players:</strong> ${data.ai_players.join(', ')}`;
+                    log(`ゲーム作成成功: ${currentGameId}`, 'success');
+                    log(`AI: ${data.ai_players.join(', ')}`, 'info');
+                } else {
+                    log(`エラー: ${JSON.stringify(data)}`, 'error');
+                }
+            } catch (error) {
+                log(`エラー: ${error.message}`, 'error');
+            }
+        }
+
+        // WebSocket接続
+        function connectWebSocket() {
+            const gameId = document.getElementById('gameId').value;
+            const username = document.getElementById('username').value;
+
+            if (!gameId || !username) {
+                log('Game IDとUsernameを入力してください', 'error');
+                return;
+            }
+
+            const wsUrl = `ws://${window.location.host}/ws/game/${gameId}?username=${username}`;
+            log(`接続中: ${wsUrl}`, 'info');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                log('WebSocket接続成功', 'success');
+                document.getElementById('wsStatus').textContent = '接続中';
+                document.getElementById('wsStatus').className = 'status connected';
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                log(`受信: ${message.type}`, 'info');
+                
+                if (message.type === 'game_state') {
+                    currentGameState = message.data;
+                    displayGameState(message.data);
+                } else if (message.type === 'error') {
+                    log(`エラー: ${message.error}`, 'error');
+                } else {
+                    log(`メッセージ: ${JSON.stringify(message)}`, 'info');
+                }
+            };
+
+            ws.onerror = (error) => {
+                log('WebSocketエラー', 'error');
+                console.error(error);
+            };
+
+            ws.onclose = () => {
+                log('WebSocket切断', 'info');
+                document.getElementById('wsStatus').textContent = '切断';
+                document.getElementById('wsStatus').className = 'status disconnected';
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // ゲーム開始
+        function startGame() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocketが接続されていません', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({ type: 'start_game' }));
+            log('ゲーム開始リクエスト送信', 'info');
+        }
+
+        // 状態取得
+        function getState() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocketが接続されていません', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({ type: 'get_state' }));
+            log('状態取得リクエスト送信', 'info');
+        }
+
+        // プレイヤーアクション
+        function playerAction(action) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocketが接続されていません', 'error');
+                return;
+            }
+
+            let amount = 0;
+            if (action === 'BET' || action === 'RAISE') {
+                amount = parseInt(document.getElementById('betAmount').value) || 0;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'player_action',
+                action: action,
+                amount: amount
+            }));
+
+            log(`アクション送信: ${action} (${amount})`, 'info');
+        }
+
+        // ゲーム状態表示
+        function displayGameState(state) {
+            const container = document.getElementById('gameState');
+            
+            let html = `
+                <div class="game-info">
+                    <div class="info-item">
+                        <div class="info-label">ステータス</div>
+                        <div class="info-value">${state.status}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">ラウンド</div>
+                        <div class="info-value">${state.current_round}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">現在のベット</div>
+                        <div class="info-value">💰 ${state.current_bet}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">ポット</div>
+                        <div class="info-value">💰 ${state.pots.reduce((sum, p) => sum + p.amount, 0)}</div>
+                    </div>
+                </div>
+            `;
+
+            // コミュニティカード
+            if (state.community_cards && state.community_cards.length > 0) {
+                html += '<h3>🃏 コミュニティカード</h3>';
+                html += '<div class="community-cards">';
+                state.community_cards.forEach(card => {
+                    html += `<div class="card">${card.rank}${card.suit}</div>`;
+                });
+                html += '</div>';
+            }
+
+            // 座席情報
+            html += '<h3>👥 座席</h3>';
+            html += '<div class="seats">';
+            state.seats.forEach((seat, index) => {
+                if (seat.player) {
+                    const isCurrent = index === state.current_seat_index;
+                    const isActive = seat.status === 'ACTIVE';
+                    html += `
+                        <div class="seat ${isCurrent ? 'current' : ''} ${isActive ? 'active' : ''}">
+                            <div class="seat-header">
+                                <span class="player-name">
+                                    ${seat.player.name} ${seat.player.is_ai ? '🤖' : '👤'}
+                                    ${isCurrent ? '⭐' : ''}
+                                </span>
+                                <span class="player-stack">💰 ${seat.stack}</span>
+                            </div>
+                            <div>ベット: ${seat.bet_in_round} | ステータス: ${seat.status}</div>
+                            ${seat.last_action ? `<div>前回: ${seat.last_action}</div>` : ''}
+                            ${seat.hole_cards && seat.hole_cards.length > 0 ? `
+                                <div class="cards">
+                                    ${seat.hole_cards.map(card => 
+                                        `<div class="card">${card.rank}${card.suit}</div>`
+                                    ).join('')}
+                                </div>
+                            ` : '<div class="cards"><div class="card hidden">?</div><div class="card hidden">?</div></div>'}
+                        </div>
+                    `;
+                }
+            });
+            html += '</div>';
+
+            // 勝者情報
+            if (state.winners && state.winners.length > 0) {
+                html += '<h3>🏆 勝者</h3>';
+                state.winners.forEach(winner => {
+                    html += `<div class="info-item">
+                        <strong>${winner.player_name}</strong> - 
+                        ${winner.hand_name} - 
+                        💰 ${winner.amount}
+                    </div>`;
+                });
+            }
+
+            container.innerHTML = html;
+        }
+
+        // 初期ログ
+        log('テストクライアント起動', 'success');
+        log('1. ゲームを作成してください', 'info');
+        log('2. WebSocketに接続してください', 'info');
+        log('3. ゲームを開始してください', 'info');
+    </script>
+</body>
+</html>

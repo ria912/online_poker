@@ -57,7 +57,6 @@ async def create_single_play_game(request: CreateSinglePlayRequest = CreateSingl
             buy_in=request.buy_in
         )
         
-        # AIプレイヤーの名前を取得
         ai_players = [p.name for p in game.players if p.is_ai]
         
         websocket_url = f"/ws/game/{game.id}?username=YOUR_USERNAME"

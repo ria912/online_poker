@@ -120,17 +120,7 @@ class ShowdownService:
         
         # コミュニティカードが5枚未満の場合、残りを配る
         while len(game.table.community_cards) < 5:
-            if game.current_round == Round.PREFLOP:
-                game.current_round = Round.FLOP
-                dealer_service.deal_community_cards(game)
-            elif game.current_round == Round.FLOP:
-                game.current_round = Round.TURN
-                dealer_service.deal_community_cards(game)
-            elif game.current_round == Round.TURN:
-                game.current_round = Round.RIVER
-                dealer_service.deal_community_cards(game)
-            else:
-                break
+            dealer_service.deal_community_card(game)
         
         # ショーダウン評価
         game.current_round = Round.SHOWDOWN
